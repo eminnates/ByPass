@@ -1,0 +1,2 @@
+google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0 burasi temsili AdSense panelinden sana verilen kodu (Örn: google.com, pub-0000000000000000, DIRECT, f08c47fec0942fa0) bu dosyanın içine yapıştır ve kaydet.
+Dikkat: AdSense panelinden "Görüntülü Reklam (Display Ad)" oluşturup data-ad-slot numarasını almalısın.
