@@ -123,7 +123,7 @@ class OuoAutoBypass:
     def hedef_linki_bul(self, baslangic_url):
         self.log(f"🚀 SÜREÇ BAŞLATILIYOR: {baslangic_url}")
         
-        driver = uc.Chrome(options=self.options, use_subprocess=True)
+        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=143)
         bulunan_link = None
         
         try:
@@ -268,7 +268,7 @@ class OuoAutoBypass:
 
 if __name__ == "__main__":
     bot = OuoAutoBypass()
-    link = "https://ouo.io/qfCHeM" 
+    link = "https://ouo.io/94jkLO" 
     sonuc = bot.hedef_linki_bul(link)
     
     print("\n" + "="*40)
