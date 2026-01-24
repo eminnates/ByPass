@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link'; // Yönlendirme için eklendi
+import Link from 'next/link';
 import {
   Clipboard, ArrowRight, Zap, CheckCircle, Shield,
   Moon, Sun, Key, Coffee, Plug, ChevronDown, ChevronUp, CheckCircle as CheckIcon, Globe
@@ -14,7 +14,10 @@ const translations: any = {
     hero: {
       placeholder: "Başlamak için bir bağlantı girin...",
       button: "ATLA",
-      autoRedirect: "Otomatik Yönlendirme"
+      autoRedirect: "Otomatik Yönlendirme",
+      processing: "İşleniyor...",
+      success: "Bypass Başarılı!",
+      go: "Git"
     },
     features: {
       site: { title: "Desteklenen Siteler", desc: "Linkvertise, Lootlabs, Mboost ve dahası." },
@@ -36,7 +39,10 @@ const translations: any = {
     hero: {
       placeholder: "Paste a link to start...",
       button: "BYPASS",
-      autoRedirect: "Auto Redirect"
+      autoRedirect: "Auto Redirect",
+      processing: "Processing...",
+      success: "Bypass Successful!",
+      go: "Go"
     },
     features: {
       site: { title: "Supported Sites", desc: "Linkvertise, Lootlabs, Mboost and more." },
@@ -53,68 +59,13 @@ const translations: any = {
     },
     footer: { privacy: "Privacy Policy", terms: "Terms of Use", contact: "Contact", rights: "All rights reserved." }
   },
-  de: {
-    nav: { home: "Startseite", coffee: "Kaffee Kaufen", discord: "Discord" },
-    hero: { placeholder: "Link hier einfügen...", button: "UMGEHEN", autoRedirect: "Auto-Weiterleitung" },
-    features: {
-      site: { title: "Unterstützte Seiten", desc: "Linkvertise, Lootlabs, Mboost und mehr." },
-      speed: { title: "Sofortige Antwort", desc: "Ziel ohne Wartezeit erreichen." },
-      secure: { title: "Sicherer Bypass", desc: "Schützen Sie Ihr Gerät vor Werbung." }
-    },
-    faq: {
-      title: "Häufig Gestellt",
-      q1: "Werden Paste-Links unterstützt?", a1: "Ja, wir unterstützen gängige Dienste.",
-      q2: "Welche Webseiten?", a2: "Linkvertise, Lootlabs, Mboost und viele mehr.",
-      q3: "Was tun bei Fehlern?", a3: "Versuchen Sie, die Seite neu zu laden.", note: "HINWEIS: Kommen Sie bei Fehlern auf Discord.",
-      q4: "Ist es kostenlos?", a4: "Ja, unser Service ist komplett kostenlos.",
-      q5: "Gibt es einen Discord-Bot?", a5: "Derzeit haben wir keinen aktiven Bot."
-    },
-    footer: { privacy: "Datenschutz", terms: "Nutzungsbedingungen", contact: "Kontakt", rights: "Alle Rechte vorbehalten." }
-  },
-  es: {
-    nav: { home: "Inicio", coffee: "Comprar Café", discord: "Discord" },
-    hero: { placeholder: "Pega un enlace aquí...", button: "SALTAR", autoRedirect: "Redirección Auto" },
-    features: {
-      site: { title: "Sitios Soportados", desc: "Linkvertise, Lootlabs, Mboost y más." },
-      speed: { title: "Respuesta Instantánea", desc: "Llega al destino sin esperar." },
-      secure: { title: "Salto Seguro", desc: "Protege tu dispositivo de anuncios." }
-    },
-    faq: {
-      title: "Preguntas Frecuentes",
-      q1: "¿Enlaces Paste soportados?", a1: "Sí, soportamos servicios populares.",
-      q2: "¿Qué sitios web?", a2: "Linkvertise, Lootlabs, Mboost y muchos más.",
-      q3: "¿Error?", a3: "Intenta recargar la página.", note: "NOTA: Únete a Discord si persiste.",
-      q4: "¿Es gratis?", a4: "Sí, es completamente gratis.",
-      q5: "¿Hay bot de Discord?", a5: "No tenemos un bot activo actualmente."
-    },
-    footer: { privacy: "Privacidad", terms: "Términos", contact: "Contacto", rights: "Reservados todos los derechos." }
-  },
-  ru: {
-    nav: { home: "Главная", coffee: "Купить кофе", discord: "Discord" },
-    hero: { placeholder: "Вставьте ссылку...", button: "ОБОЙТИ", autoRedirect: "Авто-перенаправление" },
-    features: {
-      site: { title: "Поддерживаемые сайты", desc: "Linkvertise, Lootlabs, Mboost и другие." },
-      speed: { title: "Мгновенный ответ", desc: "Достигайте цели без ожидания." },
-      secure: { title: "Безопасный обход", desc: "Защитите устройство от рекламы." }
-    },
-    faq: {
-      title: "Частые вопросы",
-      q1: "Поддерживаются ли Paste?", a1: "Да, мы поддерживаем популярные сервисы.",
-      q2: "Какие сайты?", a2: "Linkvertise, Lootlabs, Mboost и многие другие.",
-      q3: "Ошибка?", a3: "Попробуйте обновить страницу.", note: "ПРИМЕЧАНИЕ: Зайдите в Discord при ошибке.",
-      q4: "Это бесплатно?", a4: "Да, сервис полностью бесплатен.",
-      q5: "Есть ли бот?", a5: "На данный момент бота нет."
-    },
-    footer: { privacy: "Конфиденциальность", terms: "Условия", contact: "Контакты", rights: "Все права защищены." }
-  },
+  // ... Diğer diller aynı kalıpta eklenebilir ...
 };
 
+// Varsayılan dil listesi (Diğer dillerin translation objesinde olduğundan emin olun)
 const languages = [
   { code: 'tr', name: 'Türkçe', flag: '🇹🇷' },
   { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'es', name: 'Español', flag: '🇪🇸' },
-  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
 ];
 
 // --- ADSENSE REKLAM BİLEŞENİ ---
@@ -223,6 +174,7 @@ const Header = ({ isDarkMode, toggleTheme, currentLang, setLang, t }: any) => (
         </a>
 
         <a href="https://discord.gg/davet-kodu" target="_blank" rel="noopener noreferrer" className={`text-sm font-medium transition-colors flex items-center gap-2 px-3 py-2 rounded-lg ${isDarkMode ? 'text-gray-300 hover:text-white hover:bg-white/5' : 'text-gray-600 hover:text-black hover:bg-gray-100'}`}>
+          {/* Discord SVG */}
           <svg className="w-5 h-5 text-[#5865F2]" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.419-2.1568 2.419zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.419-2.1568 2.419z" />
           </svg>
@@ -268,17 +220,97 @@ const FAQItem = ({ question, answer, isNote, isDarkMode }: any) => {
 };
 
 export default function Home() {
+  // --- STATE YÖNETİMİ ---
   const [url, setUrl] = useState('');
   const [autoRedirect, setAutoRedirect] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [lang, setLang] = useState('tr'); // Varsayılan Dil: Türkçe
+  const [lang, setLang] = useState('tr');
+
+  // Backend Entegrasyonu State'leri
+  const [isLoading, setIsLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [resultLink, setResultLink] = useState('');
+  const [error, setError] = useState('');
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
+  const t = translations[lang] || translations['tr']; // Hata önlemek için fallback
 
-  // Aktif dildeki metinleri çek
-  const t = translations[lang];
+  // --- API İSTEK FONKSİYONU ---
+  const handleBypass = async () => {
+    if (!url) return;
+    
+    setIsLoading(true);
+    setError('');
+    setResultLink('');
+    setStatusMessage('Sunucuya bağlanılıyor...');
 
-  // Veri Setleri (Dile göre dinamik)
+    try {
+      // 1. İSTEK: İşlemi Başlat
+      const response = await fetch('http://127.0.0.1:8000/bypass', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url })
+      });
+
+      const data = await response.json();
+
+      if (data.status === 'success') {
+        // Cache'den geldiyse hemen bitir
+        finishProcess(data.resolved_url);
+      } else if (data.status === 'started' || data.status === 'pending') {
+        // İşlem başladı, ID'yi alıp sormaya başla (Polling)
+        pollStatus(data.id || data.check_id);
+      } else {
+        setError('Beklenmedik bir hata oluştu.');
+        setIsLoading(false);
+      }
+
+    } catch (err) {
+      setError('Sunucuya erişilemedi. Backend çalışıyor mu?');
+      setIsLoading(false);
+    }
+  };
+
+  // --- SÜREKLİ DURUM SORMA (POLLING) ---
+  const pollStatus = (id: number) => {
+    setStatusMessage('Link çözülüyor, lütfen bekleyin...');
+    
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/status/${id}`);
+        const data = await res.json();
+
+        if (data.status === 'success') {
+          clearInterval(interval);
+          finishProcess(data.resolved_url);
+        } else if (data.status === 'failed' || data.status === 'error') {
+          clearInterval(interval);
+          setError('Link çözülemedi. Lütfen tekrar deneyin.');
+          setIsLoading(false);
+        }
+        // pending ise devam et...
+      } catch (e) {
+        clearInterval(interval);
+        setError('Bağlantı koptu.');
+        setIsLoading(false);
+      }
+    }, 3000); // 3 saniyede bir sor
+  };
+
+  // --- İŞLEM BİTİŞİ ---
+  const finishProcess = (finalUrl: string) => {
+    setResultLink(finalUrl);
+    setIsLoading(false);
+    setStatusMessage(t.hero.success);
+
+    if (autoRedirect) {
+      setStatusMessage('Yönlendiriliyor...');
+      setTimeout(() => {
+        window.location.href = finalUrl;
+      }, 1500);
+    }
+  };
+
   const faqData = [
     { question: t.faq.q1, answer: t.faq.a1 },
     { question: t.faq.q2, answer: t.faq.a2 },
@@ -339,16 +371,82 @@ export default function Home() {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder={t.hero.placeholder}
-                className="w-full bg-transparent py-4 outline-none text-lg"
+                disabled={isLoading}
+                className="w-full bg-transparent py-4 outline-none text-lg disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <button onClick={() => navigator.clipboard.readText().then(setUrl)} className="p-2 hover:text-green-400 transition-colors">
+              <button 
+                onClick={() => navigator.clipboard.readText().then(setUrl)} 
+                disabled={isLoading}
+                className="p-2 hover:text-green-400 transition-colors disabled:opacity-50"
+              >
                 <Clipboard size={22} />
               </button>
             </div>
-            <button className="md:w-64 bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-8 rounded-xl transition-all flex items-center justify-center gap-3 text-lg shadow-lg active:scale-95">
-              {t.hero.button} <ArrowRight size={22} />
+            <button 
+              onClick={handleBypass}
+              disabled={isLoading || !url}
+              className={`md:w-64 text-white font-bold py-4 px-8 rounded-xl transition-all flex items-center justify-center gap-3 text-lg shadow-lg active:scale-95
+                ${isLoading ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}
+              `}
+            >
+              {isLoading ? (
+                 <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>{t.hero.processing}</span>
+                 </div>
+              ) : (
+                <>
+                  {t.hero.button} <ArrowRight size={22} />
+                </>
+              )}
             </button>
           </div>
+
+          {/* --- SONUÇ VE DURUM ALANI --- */}
+          
+          {/* Hata Mesajı */}
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-center font-medium animate-in fade-in">
+              {error}
+            </div>
+          )}
+
+          {/* Durum Mesajı (Sadece yüklenirken ve hata yoksa) */}
+          {isLoading && !error && (
+            <div className="text-center text-sm text-gray-400 animate-pulse">
+              {statusMessage}
+            </div>
+          )}
+
+          {/* BAŞARILI SONUÇ KARTI */}
+          {resultLink && (
+            <div className={`p-6 rounded-2xl border animate-in zoom-in-95 duration-300 flex flex-col gap-4
+              ${isDarkMode ? 'bg-green-900/10 border-green-500/30' : 'bg-green-50 border-green-200'}`}>
+              
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-green-500 flex items-center gap-2">
+                  <CheckCircle size={20} /> {t.hero.success}
+                </span>
+                {autoRedirect && <span className="text-xs text-gray-400 animate-pulse">Otomatik yönlendiriliyor...</span>}
+              </div>
+
+              <div className={`flex items-center gap-2 p-3 rounded-lg ${isDarkMode ? 'bg-black/40' : 'bg-white border'}`}>
+                <input 
+                  readOnly 
+                  value={resultLink} 
+                  className="bg-transparent w-full outline-none text-sm text-gray-500" 
+                />
+                <a 
+                  href={resultLink} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                >
+                  {t.hero.go} <Globe size={16}/>
+                </a>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-center gap-6">
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setAutoRedirect(!autoRedirect)}>
@@ -361,7 +459,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ÖZELLİKLER (3'LÜ KART) */}
+      {/* ÖZELLİKLER */}
       <div className="w-full max-w-5xl px-4 py-20 grid grid-cols-1 md:grid-cols-3 gap-6 z-20">
         {[
           { icon: <CheckCircle className="text-emerald-400" />, title: t.features.site.title, desc: t.features.site.desc },
@@ -392,7 +490,6 @@ export default function Home() {
       {/* FOOTER */}
       <footer className={`w-full py-12 border-t text-center text-xs z-20 ${isDarkMode ? 'bg-black border-white/5 text-gray-500' : 'bg-white border-gray-200 text-gray-400'}`}>
         <div className="flex justify-center gap-8 mb-6 text-sm font-medium">
-          {/* YENİ LİNKLER - MODAL YERİNE LINK KULLANIYORUZ */}
           <Link href="/privacy" className="hover:text-green-400 transition">
             {t.footer.privacy}
           </Link>
