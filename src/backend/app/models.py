@@ -12,4 +12,6 @@ class BypassLink(Base):
     status = Column(String, default="pending")
     # YENİ SÜTUN:
     webhook_url = Column(String, nullable=True) 
+    safety_status = Column(String, nullable=True)  # Clean/Malicious/Suspicious/None
+    last_scanned_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

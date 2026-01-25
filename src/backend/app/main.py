@@ -11,16 +11,14 @@ models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI()
 
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Güvenlik için canlıda ["https://seninsiten.com"] yap
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Dependency
 def get_db():
     db = database.SessionLocal()
     try:
@@ -36,22 +34,19 @@ class LinkRequest(BaseModel):
 async def bypass_url(req: LinkRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     url = req.url.strip()
     
-    # 1. ADIM: HIZLI KONTROL (Cache Check)
     cached_link = db.query(models.BypassLink).filter(models.BypassLink.original_url == url).first()
     
     if cached_link:
         if cached_link.status == "success":
-            return {"status": "success", "resolved_url": cached_link.resolved_url, "source": "cache"}
+            return {"status": "success", "resolved_url": cached_link.resolved_url, "safety_status": cached_link.safety_status, "source": "cache"}
         elif cached_link.status == "pending":
             return {"status": "pending", "message": "İşleniyor, lütfen bekleyin."}
     
-    # 2. ADIM: YOKSA YENİ KAYIT AÇ VE İŞLEMİ BAŞLAT
     new_record = models.BypassLink(original_url=url, status="pending", webhook_url=req.webhook_url)
     db.add(new_record)
     db.commit()
     db.refresh(new_record)
     
-    # İşlemi arka plana at (Kullanıcıyı bekletme)
     background_tasks.add_task(run_bypass_process, new_record.id, url)
     
     return {"status": "started", "id": new_record.id, "message": "İşlem başlatıldı."}
@@ -61,4 +56,18 @@ async def get_status(id: int, db: Session = Depends(get_db)):
     record = db.query(models.BypassLink).filter(models.BypassLink.id == id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Link bulunamadı")
-    return {"status": record.status, "resolved_url": record.resolved_url}
+    return {"status": record.status, "resolved_url": record.resolved_url, "safety_status": record.safety_status}
+
+# --- YENİ EKLENEN ENDPOINT ---
+@app.get("/analysis/{id}")
+async def get_analysis(id: int, db: Session = Depends(get_db)):
+    record = db.query(models.BypassLink).filter(models.BypassLink.id == id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Link bulunamadı")
+    
+    return {
+        "original_url": record.original_url,
+        "resolved_url": record.resolved_url,
+        "safety_status": record.safety_status,
+        "last_scanned_at": record.last_scanned_at
+    }
