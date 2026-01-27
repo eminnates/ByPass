@@ -1,6 +1,7 @@
 import undetected_chromedriver as uc
 import time
 import datetime
+import os # Eklendi
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -8,12 +9,23 @@ from selenium.webdriver.common.action_chains import ActionChains
 from pyvirtualdisplay import Display
 
 class OuoAutoBypass:
-    def __init__(self):
-        self.log("🖥️ Sanal ekran (Xvfb) başlatılıyor...")
-        self.display = Display(visible=0, size=(1920, 1080))
-        self.display.start()
+    def __init__(self, debug_mode=False): # Debug modu eklendi
+        self.debug_mode = debug_mode
+        self.display = None
 
-        self.log("🌐 Tarayıcı ayarları yapılıyor...")
+        self.log(f"🔧 Başlatılıyor... (Debug Modu: {'AÇIK ✅' if debug_mode else 'KAPALI ❌'})")
+
+        if not self.debug_mode:
+            self.log("🖥️ Sanal ekran (Xvfb) başlatılıyor...")
+            try:
+                self.display = Display(visible=0, size=(1920, 1080))
+                self.display.start()
+                self.log("✅ Sanal monitör aktif.")
+            except Exception as e:
+                self.log(f"⚠️ Ekran hatası: {e}")
+        else:
+            self.log("👀 Debug modu açık: Tarayıcı gerçek ekranda açılacak.")
+
         self.options = uc.ChromeOptions()
         
         self.options.add_argument('--no-sandbox')
@@ -21,6 +33,7 @@ class OuoAutoBypass:
         self.options.add_argument("--mute-audio")
         self.options.add_argument("--disable-popup-blocking")
         self.options.add_argument("--start-maximized")
+        self.options.add_argument("--window-size=1920,1080") # Çözünürlük sabitlendi
         self.options.add_argument("--disable-blink-features=AutomationControlled")
         self.options.add_argument("--password-store=basic")
         self.options.page_load_strategy = 'eager' 
@@ -31,13 +44,26 @@ class OuoAutoBypass:
         zaman = datetime.datetime.now().strftime("%H:%M:%S")
         print(f"[{zaman}] {mesaj}")
 
-    def screenshot_al(self, driver, isim):
+    # --- YENİ EKLENEN FONKSİYON ---
+    def hata_analiz_kaydet(self, driver, hata_tipi="genel"):
+        """Hata anında ekran görüntüsü ve HTML kaynağını kaydeder."""
         try:
-            dosya_adi = f"debug_{isim}.png"
-            driver.save_screenshot(dosya_adi)
-            self.log(f"📸 EKRAN GÖRÜNTÜSÜ KAYDEDİLDİ: {dosya_adi}")
+            klasor = "hata_logs"
+            if not os.path.exists(klasor): os.makedirs(klasor)
+            zaman = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            dosya_adi = f"{klasor}/OUO_{hata_tipi}_{zaman}" # OUO öneki eklendi
+            
+            # 1. Ekran Görüntüsü
+            driver.save_screenshot(f"{dosya_adi}.png")
+            
+            # 2. HTML Kaynağı
+            with open(f"{dosya_adi}.html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+                
+            self.log(f"📸 Hata Analizi Kaydedildi: {dosya_adi}")
         except Exception as e:
-            self.log(f"⚠️ Screenshot alınamadı: {e}")
+            self.log(f"⚠️ Hata analizi kaydedilemedi: {e}")
+    # ------------------------------
 
     def insan_taklidi_yap(self, driver):
         try:
@@ -48,76 +74,55 @@ class OuoAutoBypass:
             pass
 
     def guvenli_ve_hizli_temizlik(self, driver, ana_pencere_id):
-        """
-        Sekmeleri kapatırken oturumu çökertmemek için güvenli temizlik yapar.
-        Asla tek kalan sekmeyi veya ana sekmeyi kapatmaz.
-        """
         try:
             tum_pencereler = driver.window_handles
-            
-            # Eğer sadece 1 pencere varsa işlem yapma (kapatırsak session ölür)
             if len(tum_pencereler) <= 1:
                 return driver.current_window_handle
 
-            self.log(f"🧹 [Hibrit Temizlik] {len(tum_pencereler)} pencere kontrol ediliyor...")
-            
+            self.log(f"🧹 Temizlik: {len(tum_pencereler)} pencere kontrol ediliyor...")
             driver.set_page_load_timeout(5)
             yeni_ana_pencere = ana_pencere_id
-            
-            to_close = [] # Kapatılacakların listesi
+            to_close = [] 
 
             for handle in tum_pencereler:
-                # Ana pencereyi şimdilik es geç
-                if handle == ana_pencere_id:
-                    continue 
+                if handle == ana_pencere_id: continue 
 
                 try:
                     driver.switch_to.window(handle)
                     mevcut_url = driver.current_url
                     
                     if "ouo" in mevcut_url:
-                        self.log(f"   ✅ Yeni 'ouo' sekmesi bulundu, korunuyor.")
                         yeni_ana_pencere = handle 
                     elif "google.com/recaptcha" in mevcut_url:
-                         self.log("   ✅ Captcha penceresi korunuyor.")
+                         pass # Koru
                     else:
-                        self.log(f"   🗑️ Reklam tespit edildi ({handle})...")
                         to_close.append(handle)
-                        
-                except Exception:
-                    self.log("   🗑️ Yanıt vermeyen sayfa, kapatılacak.")
+                except:
                     to_close.append(handle)
 
-            # Şimdi listelenenleri kapat
             for handle in to_close:
-                # Yeni ana pencereyi yanlışlıkla kapatma
                 if handle != yeni_ana_pencere:
                     try:
                         driver.switch_to.window(handle)
                         driver.close()
-                    except:
-                        pass
+                    except: pass
             
             driver.set_page_load_timeout(30)
             
-            # Güvenli pencereye geçiş yap
             if yeni_ana_pencere in driver.window_handles:
                 driver.switch_to.window(yeni_ana_pencere)
                 return yeni_ana_pencere
             else:
-                # Eğer o da yoksa, kalan ilk pencereye geç
                 driver.switch_to.window(driver.window_handles[0])
                 return driver.window_handles[0]
 
         except Exception as e:
             self.log(f"⚠️ Temizlik hatası: {e}")
-            driver.set_page_load_timeout(30)
             try:
                 if len(driver.window_handles) > 0:
                     driver.switch_to.window(driver.window_handles[0])
                     return driver.window_handles[0]
-            except: 
-                pass
+            except: pass
             return ana_pencere_id
 
     def hedef_linki_bul(self, baslangic_url):
@@ -135,21 +140,17 @@ class OuoAutoBypass:
             ana_pencere_id = driver.current_window_handle
 
             while True:
-                # --- ZAMAN AŞIMI ---
                 if time.time() - start_time > max_sure:
                     self.log("❌ ZAMAN AŞIMI!")
-                    self.screenshot_al(driver, "timeout_error")
+                    self.hata_analiz_kaydet(driver, "zaman_asimi") # GÜNCELLENDİ
                     break
 
                 try:
                     current_url = driver.current_url
                 except Exception as e:
-                    # GİRİNTİ DÜZELTİLDİ: Hata yakalama bloğu
                     if "invalid session" in str(e).lower():
-                        self.log("❌ Tarayıcı oturumu kapandı/çöktü. İşlem sonlandırılıyor.")
+                        self.log("❌ Oturum kapandı.")
                         break
-                    
-                    self.log("⚠️ URL okunamadı, bekleniyor...")
                     time.sleep(1)
                     continue
 
@@ -164,9 +165,7 @@ class OuoAutoBypass:
                     time.sleep(3)
                     continue
 
-                # ============================================================
-                #    AŞAMA 2: GO SAYFASI
-                # ============================================================
+                # --- 2. GO SAYFASI ---
                 if "/go/" in current_url:
                     self.log("📍 Durum: '/go/' sayfasındayız.")
                     try:
@@ -188,27 +187,22 @@ class OuoAutoBypass:
                         )
                         
                         self.log("🖱️ Butona tıklandı!")
-                        try:
-                            btn.click()
-                        except:
-                            driver.execute_script("arguments[0].click();", btn)
+                        try: btn.click()
+                        except: driver.execute_script("arguments[0].click();", btn)
                         
                         time.sleep(2)
                         ana_pencere_id = self.guvenli_ve_hizli_temizlik(driver, ana_pencere_id)
-                        
                         time.sleep(2)
                         continue 
 
                     except Exception as e:
                         self.log(f"❌ Go Sayfası Hatası: {e}")
-                        try:
-                            driver.execute_script("document.getElementById('form-go').submit();")
+                        self.hata_analiz_kaydet(driver, "go_sayfasi_hata") # EKLENDİ
+                        try: driver.execute_script("document.getElementById('form-go').submit();")
                         except: pass
                         time.sleep(2)
 
-                # ============================================================
-                #    AŞAMA 1: İLK SAYFA
-                # ============================================================
+                # --- 3. İLK SAYFA ---
                 else:
                     try:
                         self.log("📍 Durum: Aşama 1 (Ben robot değilim).")
@@ -216,17 +210,17 @@ class OuoAutoBypass:
                         try:
                             cf_iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@src, 'https://challenges.cloudflare.com')]")
                             if cf_iframe:
-                                self.log("⚠️ Cloudflare Turnstile algılandı! Çözülmeye çalışılıyor...")
+                                self.log("⚠️ CF Turnstile algılandı.")
                                 self.insan_taklidi_yap(driver)
                                 time.sleep(2)
-                        except:
-                            pass
+                        except: pass
 
                         btn = WebDriverWait(driver, 10).until(
                             EC.presence_of_element_located((By.ID, "btn-main"))
                         )
                         self.log("✅ Buton bulundu.")
 
+                        # Reklam iframelerini sil
                         driver.execute_script("""
                             var iframes = document.querySelectorAll('iframe');
                             iframes.forEach(function(iframe) {
@@ -248,26 +242,28 @@ class OuoAutoBypass:
 
                     except Exception as e:
                         self.log(f"⚠️ Aşama 1 Hatası: {e}")
+                        self.hata_analiz_kaydet(driver, "asama_1_hata") # EKLENDİ
                         time.sleep(2)
 
         except Exception as e:
             self.log(f"❌ KRİTİK HATA: {e}")
-            self.screenshot_al(driver, "critical_crash")
+            self.hata_analiz_kaydet(driver, "kritik_cokme") # GÜNCELLENDİ
         finally:
             self.log("🏁 Tarayıcı kapatılıyor.")
-            try:
-                driver.quit()
+            try: driver.quit()
             except: pass
             
             try:
-                self.display.stop()
-                self.log("🛑 Sanal ekran kapatıldı.")
+                if self.display:
+                    self.display.stop()
+                    self.log("🛑 Sanal ekran kapatıldı.")
             except: pass
             
         return bulunan_link
 
 if __name__ == "__main__":
-    bot = OuoAutoBypass()
+    # Test için debug modunu açabilirsin (True)
+    bot = OuoAutoBypass(debug_mode=True)
     link = "https://ouo.io/94jkLO" 
     sonuc = bot.hedef_linki_bul(link)
     

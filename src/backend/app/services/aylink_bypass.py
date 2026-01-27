@@ -33,8 +33,13 @@ class AyLinkBypassUltimate:
         self.options.add_argument('--no-sandbox')
         self.options.add_argument('--disable-dev-shm-usage')
         self.options.add_argument("--mute-audio")
-        # Bildirimleri otomatik reddet/kabul et ayarı (Allow sayfaları için kritik)
-        self.options.add_argument("--disable-notifications") 
+        
+        # Bildirim İzni Fix'i
+        prefs = {
+            "profile.default_content_setting_values.notifications": 1
+        }
+        self.options.add_experimental_option("prefs", prefs)
+
         self.options.add_argument("--disable-popup-blocking")
         self.options.add_argument("--start-maximized")
         self.options.add_argument("--window-size=1920,1080")
@@ -99,25 +104,19 @@ class AyLinkBypassUltimate:
 
     def akilli_sekme_filtresi(self, driver):
         """
-        Tüm sekmeleri gezer.
-        'btnPlay', 'btnPermission' veya 'btnDownload' içeren sekmeyi bulur.
-        Diğerlerini kapatır.
-        Bulduğu butonun ID'sini döndürür.
+        Tüm sekmeleri gezer. 'btnPlay', 'btnPermission' veya 'btnDownload' bulursa ID döner.
         """
         self.log("🔍 Tüm sekmelerde Butonlar taranıyor (Play/Allow)...")
         tum_sekmeler = driver.window_handles
         hedef_sekme = None
         bulunan_buton_id = None
         
-        # Olası buton ID'leri (Senin attığın resimdeki 'btnPermission' buraya eklendi)
         olasi_idler = ["btnPlay", "btnPermission", "btnDownload"]
 
-        # 1. TARAMA
         for handle in tum_sekmeler:
             try:
                 driver.switch_to.window(handle)
                 for buton_id in olasi_idler:
-                    # Buton var mı diye bak (DOM içinde olması yeterli)
                     if len(driver.find_elements(By.ID, buton_id)) > 0:
                         self.log(f"✅ HEDEF BULUNDU! Sekme: {handle} | Buton: #{buton_id}")
                         hedef_sekme = handle
@@ -126,7 +125,6 @@ class AyLinkBypassUltimate:
                 if hedef_sekme: break
             except: pass
 
-        # 2. TEMİZLİK
         if hedef_sekme:
             for handle in tum_sekmeler:
                 if handle != hedef_sekme:
@@ -135,9 +133,8 @@ class AyLinkBypassUltimate:
                         driver.close()
                     except: pass
             driver.switch_to.window(hedef_sekme)
-            return bulunan_buton_id # Hangi butonu bulduysak onu döndür
+            return bulunan_buton_id
         else:
-            self.log("⚠️ Hiçbir sekmede geçerli buton (Play/Allow) bulunamadı.")
             return None
 
     def buton_bul_tikla(self, driver):
@@ -149,9 +146,11 @@ class AyLinkBypassUltimate:
         ]
         for tip, secici in seciciler:
             try:
+                # Butonu bulmadan önce CF kontrolü yap
+                self.cloudflare_gec(driver)
+                
                 btn = WebDriverWait(driver, 4).until(EC.element_to_be_clickable((tip, secici)))
                 self.log(f"✅ Buton bulundu ({secici}).")
-                self.cloudflare_gec(driver)
                 try: ActionChains(driver).move_to_element(btn).click().perform()
                 except: driver.execute_script("arguments[0].click();", btn)
                 return True
@@ -178,54 +177,86 @@ class AyLinkBypassUltimate:
             self.reklam_kapat(driver, ana_pencere_id)
             time.sleep(2)
 
-            # --- SAYFA 2: ARA SAYFAYA GEÇİŞ ---
-            if self.buton_bul_tikla(driver):
-                self.log("✌️ Ara sayfaya geçiş tıklaması yapıldı...")
-                time.sleep(5)
-                
-                # --- KRİTİK NOKTA: AKILLI FİLTRE ---
-                # Hangi buton varsa (Play veya Allow) onu bulur
-                bulunan_buton = self.akilli_sekme_filtresi(driver)
-                
-                if bulunan_buton:
-                    self.cloudflare_gec(driver)
+            # --- SAYFA 2: ARA SAYFAYA GEÇİŞ (RETRY LOOP) ---
+            
+            # Bu değişkeni döngü dışında tanımlıyoruz
+            bulunan_buton = None
+            
+            # Ara sayfa geçişini maksimum 3 kez deneyeceğiz
+            for deneme in range(1, 4):
+                if self.buton_bul_tikla(driver):
+                    self.log(f"✌️ Ara sayfaya geçiş tıklaması yapıldı (Deneme {deneme})...")
+                    time.sleep(5) # Yeni sayfanın/popup'ın açılması için süre
                     
-                    try:
-                        self.log(f"⏳ '{bulunan_buton}' butonu bekleniyor...")
-                        hedef_btn = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, bulunan_buton)))
+                    # Buton var mı diye kontrol et
+                    bulunan_buton = self.akilli_sekme_filtresi(driver)
+                    
+                    if bulunan_buton:
+                        # Buton bulunduysa döngüden çık, devam et
+                        break
+                    else:
+                        self.log("⚠️ Buton bulunamadı, ana sekmeye dönülüp tekrar denenecek...")
                         
-                        # Vuruş 1: Tetikleme
-                        self.log("▶️ Buton (1/2) - Reklam/İzin tetikleme...")
+                        # Ana pencereye geri dön
+                        try:
+                            driver.switch_to.window(ana_pencere_id)
+                        except Exception as e:
+                            self.log(f"❌ Ana pencereye dönülemedi: {e}")
+                            break # Ana pencere yoksa yapacak bir şey yok
+                        
+                        # Biraz bekle ve tekrar dene
+                        time.sleep(2)
+                else:
+                    self.log("❌ Ara sayfa butonu (Go to Link) bulunamadı.")
+                    break
+
+            # -----------------------------------------------
+            
+            if bulunan_buton:
+                self.cloudflare_gec(driver)
+                ana_pencere_id = driver.current_window_handle
+                
+                self.log(f"🥊 '{bulunan_buton}' butonuna ısrarla tıklanacak...")
+                
+                # --- SON AŞAMA: WHACK-A-MOLE ---
+                for deneme in range(1, 7):
+                    try:
+                        hedef_btn = WebDriverWait(driver, 5).until(
+                            EC.element_to_be_clickable((By.ID, bulunan_buton))
+                        )
+                        
+                        self.log(f"▶️ Tıklama Denemesi ({deneme}/6)")
                         try: ActionChains(driver).move_to_element(hedef_btn).click().perform()
                         except: driver.execute_script("arguments[0].click();", hedef_btn)
-                        time.sleep(3)
                         
-                        # Tekrar filtrele (Sayfa yenilenmiş olabilir)
-                        self.akilli_sekme_filtresi(driver)
+                        time.sleep(2)
+                        self.reklam_kapat(driver, ana_pencere_id)
                         
-                        # Vuruş 2: Gerçek işlem
-                        self.log("▶️ Buton (2/2) - Gerçek tıklama...")
-                        try: hedef_btn = driver.find_element(By.ID, bulunan_buton)
-                        except: pass 
-                        driver.execute_script("arguments[0].click();", hedef_btn)
-                        
-                        self.log("⏳ Son Yönlendirme bekleniyor...")
-                        time.sleep(5)
-                        
-                        # Sonuç sayfasında buton yoktur, son sekmeye git
-                        if len(driver.window_handles) > 1:
-                            driver.switch_to.window(driver.window_handles[-1])
-                        
-                        hedef_link = driver.current_url
+                        mevcut_url = driver.current_url
+                        if "ay.link" not in mevcut_url and "ay.live" not in mevcut_url and "bildirim" not in mevcut_url:
+                            self.log("🎉 URL değişti, işlem tamam!")
+                            break
                         
                     except Exception as e:
-                        self.log(f"⚠️ Buton işlem hatası: {e}")
-                        self.hata_analiz_kaydet(driver, "buton_islem_hatasi")
-                        if "ay.link" not in driver.current_url and "github" not in driver.current_url:
-                            hedef_link = driver.current_url
-                else:
-                    self.log("❌ Geçerli bir buton (Play/Allow) bulunamadı.")
-                    self.hata_analiz_kaydet(driver, "buton_yok")
+                        self.log(f"✅ Buton kayboldu veya sayfa değişti.")
+                        break
+                # ------------------------------
+                
+                self.log("⏳ Son Yönlendirme bekleniyor...")
+                time.sleep(5)
+                
+                if "bildirim" in driver.current_url:
+                    self.log("⚠️ Bildirim sayfasındayız, yönlendirme bekleniyor (10sn)...")
+                    time.sleep(10)
+                
+                if len(driver.window_handles) > 1:
+                    driver.switch_to.window(driver.window_handles[-1])
+                
+                hedef_link = driver.current_url
+                    
+            else:
+                self.log("❌ 3 Denemede de geçerli bir buton (Play/Allow) bulunamadı.")
+                self.hata_analiz_kaydet(driver, "buton_yok_final")
 
         except Exception as e:
             self.log(f"❌ KRİTİK HATA: {e}")
@@ -241,7 +272,6 @@ class AyLinkBypassUltimate:
         return hedef_link
 
 if __name__ == "__main__":
-    bot = AyLinkBypassUltimate(debug_mode=False)
-    # Hata aldığın linki tekrar dene:
-    link = "https://ay.link/7NSS" 
+    bot = AyLinkBypassUltimate(debug_mode=True)
+    link = "https://ay.link/sarisin" 
     print(f"\n🎯 NİHAİ SONUÇ: {bot.baslat(link)}")
