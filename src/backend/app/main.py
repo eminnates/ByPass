@@ -75,6 +75,22 @@ async def bypass_url(req: LinkRequest, background_tasks: BackgroundTasks, db: Se
             return {"status": "success", "resolved_url": cached_link.resolved_url, "safety_status": cached_link.safety_status, "source": "cache"}
         elif cached_link.status == "pending":
             return {"status": "pending", "message": "İşleniyor, lütfen bekleyin."}
+        elif cached_link.status == "failed" or cached_link.status == "error":
+            print(f"♻️ Retrying failed link: {url}")
+            
+            cached_link.status = "pending"
+            cached_link.safety_status = None
+            cached_link.webhook_url = req.webhook_url
+            
+            db.commit()
+            
+            background_tasks.add_task(run_bypass_process, cached_link.id, url)
+            
+            return {
+                "status": "started", 
+                "id": cached_link.id, 
+                "message": "Önceki işlem başarısızdı, tekrar kuyruğa alındı."
+            }
     
     new_record = models.BypassLink(original_url=url, status="pending", webhook_url=req.webhook_url)
     db.add(new_record)
