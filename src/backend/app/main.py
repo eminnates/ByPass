@@ -1,11 +1,20 @@
 from fastapi import FastAPI, BackgroundTasks, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, field_validator 
+from urllib.parse import urlparse 
 from pydantic import BaseModel
 from . import models, database
 from .services.engine_wrapper import run_bypass_process
 from typing import Optional
 
+ALLOWED_DOMAINS = [
+    "ay.link",
+    "ay.live",
+    "ouo.io",
+    "ouo.press",
+    "tl.tc"
+]
 # Tabloları oluştur
 models.Base.metadata.create_all(bind=database.engine)
 
@@ -30,6 +39,31 @@ class LinkRequest(BaseModel):
     url: str
     webhook_url: Optional[str] = None
 
+    @field_validator('url')
+    def validate_url_rules(cls, v: str):
+        # 1. KURAL: Maske Kontrolü (HTTPS Zorunluluğu)
+        # Gelen veri 'https://' ile başlamıyorsa hata ver
+        if not v.startswith("https://"):
+            raise ValueError('Güvenlik gereği linkler "https://" ile başlamalıdır.')
+
+        try:
+
+            parsed = urlparse(v)
+            domain = parsed.netloc.lower()
+            
+            if domain.startswith("www."):
+                domain = domain[4:]
+
+            # Listede var mı?
+            if domain not in ALLOWED_DOMAINS:
+                raise ValueError(f"Bu site desteklenmiyor: {domain}. Sadece şunlar geçerli: {', '.join(ALLOWED_DOMAINS)}")
+        
+        except Exception:
+            raise ValueError("Geçersiz URL formatı.")
+
+
+        return v
+    
 @app.post("/bypass")
 async def bypass_url(req: LinkRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     url = req.url.strip()
