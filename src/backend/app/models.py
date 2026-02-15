@@ -10,7 +10,7 @@ class BypassLink(Base):
     original_url = Column(String, unique=True, index=True)
     resolved_url = Column(String, nullable=True)
     status = Column(String, default="pending")
-    # YENİ SÜTUN:
+    fail_reason = Column(String, nullable=True)  # link_not_found / timeout / unknown
     webhook_url = Column(String, nullable=True) 
     safety_status = Column(String, nullable=True)  # Clean/Malicious/Suspicious/None
     last_scanned_at = Column(DateTime(timezone=True), nullable=True)

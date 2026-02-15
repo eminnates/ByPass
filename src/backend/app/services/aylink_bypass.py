@@ -66,6 +66,20 @@ class AyLinkBypassUltimate:
     def rastgele_bekle(self, min_s=1, max_s=3):
         time.sleep(random.uniform(min_s, max_s))
 
+    def sayfa_404_mi(self, driver):
+        """Sayfada 404 hatası varsa link geçersizdir."""
+        try:
+            kaynak = driver.page_source
+            if "404 - Link bulunamad" in kaynak or ">Link bulunamad" in kaynak:
+                return True
+            # Title kontrolü
+            baslik = driver.title or ""
+            if "404" in baslik:
+                return True
+        except Exception:
+            pass
+        return False
+
     def cloudflare_gec(self, driver):
         self.log("🛡️ Cloudflare kontrol ediliyor...")
         try:
@@ -168,10 +182,20 @@ class AyLinkBypassUltimate:
             driver.get(url)
             ana_pencere_id = driver.current_window_handle
             time.sleep(5)
+
+            # --- 404 KONTROLÜ ---
+            if self.sayfa_404_mi(driver):
+                self.log("Link bulunamadı (404). İşlem iptal ediliyor.")
+                return "__NOT_FOUND__"
+
             self.cloudflare_gec(driver)
             
             # --- SAYFA 1: REKLAM TETİKLEME ---
             if not self.buton_bul_tikla(driver):
+                # Buton yoksa tekrar 404 kontrolü yap (yönlendirme olmuş olabilir)
+                if self.sayfa_404_mi(driver):
+                    self.log("Link bulunamadı (404). İşlem iptal ediliyor.")
+                    return "__NOT_FOUND__"
                 self.hata_analiz_kaydet(driver, "buton_bulunamadi_1")
                 return None
 

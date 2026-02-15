@@ -307,7 +307,16 @@ export default function Home() {
         } else if (data.status === 'failed' || data.status === 'error') {
           clearInterval(interval);
           setQueuePosition(null);
-          setError('Link çözülemedi. Lütfen tekrar deneyin.');
+
+          // fail_reason'a göre özel hata mesajı
+          if (data.fail_reason === 'link_not_found') {
+            setError('Bu link artık geçerli değil veya kaldırılmış (404).');
+          } else if (data.fail_reason === 'timeout') {
+            setError('İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.');
+          } else {
+            setError('Link çözülemedi. Lütfen tekrar deneyin.');
+          }
+
           setIsLoading(false);
         }
       } catch (e) {
