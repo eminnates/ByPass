@@ -230,7 +230,8 @@ def test_engine(url):
     for adim, sure in sonuc["asamalar"].items():
         bant = "█" * int(sure)
         print(f"     {adim:20s} {renkli(f'{sure:6.2f}s', C.YELLOW)} {renkli(bant, C.BLUE)}")
-    print(f"     {'TOPLAM':20s} {renkli(f'{sonuc[\"toplam_sure\"]:6.2f}s', C.GREEN)}")
+    toplam = sonuc["toplam_sure"]
+    print(f"     {'TOPLAM':20s} {renkli(f'{toplam:6.2f}s', C.GREEN)}")
 
     return sonuc
 
@@ -271,7 +272,8 @@ def rapor_yazdir(sonuclar):
 
     for s in sonuclar:
         durum_renk = C.GREEN if "basarili" in s.get("durum", "") or s.get("durum") == "cache_hit" else C.RED
-        print(f"  {s['test']:25s} | {renkli(f'{s.get(\"toplam_sure\", 0):6.2f}s', C.YELLOW)} | {renkli(s.get('durum', '?'), durum_renk)}")
+        sure_val = s.get("toplam_sure", 0)
+        print(f"  {s['test']:25s} | {renkli(f'{sure_val:6.2f}s', C.YELLOW)} | {renkli(s.get('durum', '?'), durum_renk)}")
 
     toplam_sureler = [s["toplam_sure"] for s in sonuclar if s.get("toplam_sure", 0) > 0]
     if toplam_sureler:
