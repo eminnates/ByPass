@@ -67,6 +67,16 @@ class OuoAutoBypass:
             self.log(f"⚠️ Hata analizi kaydedilemedi: {e}")
     # ------------------------------
 
+    def sayfa_404_mi(self, driver):
+        """Sayfada ouo.io/js/404.js varsa link geçersizdir."""
+        try:
+            kaynak = driver.page_source
+            if "ouo.io/js/404.js" in kaynak or "LINK NOT FOUND" in kaynak:
+                return True
+        except Exception:
+            pass
+        return False
+
     def insan_taklidi_yap(self, driver):
         try:
             body = driver.find_element(By.TAG_NAME, 'body')
@@ -136,6 +146,13 @@ class OuoAutoBypass:
         try:
             driver.get(baslangic_url)
             self.log("Sayfaya gidildi.")
+            time.sleep(3)
+
+            # --- 404 KONTROLÜ (İLK AÇILIŞTA) ---
+            if self.sayfa_404_mi(driver):
+                self.log("Link bulunamadı (404). İşlem iptal ediliyor.")
+                return "__NOT_FOUND__"
+
             start_time = time.time()
             max_sure = 120 
 
@@ -143,8 +160,9 @@ class OuoAutoBypass:
 
             while True:
                 if time.time() - start_time > max_sure:
-                    self.log("❌ ZAMAN AŞIMI!")
-                    self.hata_analiz_kaydet(driver, "zaman_asimi") # GÜNCELLENDİ
+                    self.log("ZAMAN AŞIMI!")
+                    self.hata_analiz_kaydet(driver, "zaman_asimi")
+                    return "__TIMEOUT__"
                     break
 
                 try:
@@ -156,10 +174,16 @@ class OuoAutoBypass:
                     time.sleep(1)
                     continue
 
+                # --- 0. 404 KONTROLÜ (DÖNGÜ İÇİ) ---
+                if self.sayfa_404_mi(driver):
+                    self.log("Link bulunamadı (404). İşlem iptal ediliyor.")
+                    self.hata_analiz_kaydet(driver, "404_not_found")
+                    return "__NOT_FOUND__"
+
                 # --- 1. HEDEF KONTROLÜ ---
                 if "ouo" not in current_url and "about:blank" not in current_url and "google.com" not in current_url:
                     bulunan_link = current_url
-                    self.log(f"✅ HEDEF BULUNDU: {current_url}")
+                    self.log(f"HEDEF BULUNDU: {current_url}")
                     break
 
                 if "Method Not Allowed" in driver.page_source:

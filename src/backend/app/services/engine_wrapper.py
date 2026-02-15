@@ -26,7 +26,19 @@ def run_bypass_process(link_id: int, url: str):
             cozum = bot.hedef_linki_bul(url)
             
         # --- 2. SONUÇ VE GÜVENLİK ---
-        if cozum:
+        if cozum and cozum.startswith("__"):
+            # Özel sinyal: __NOT_FOUND__, __TIMEOUT__ vb.
+            record.status = "failed"
+            if cozum == "__NOT_FOUND__":
+                record.fail_reason = "link_not_found"
+                log.warning(f"Link bulunamadı (404): ID={link_id} | URL={url}")
+            elif cozum == "__TIMEOUT__":
+                record.fail_reason = "timeout"
+                log.warning(f"Zaman aşımı: ID={link_id} | URL={url}")
+            else:
+                record.fail_reason = "unknown"
+                log.warning(f"Bilinmeyen sinyal ({cozum}): ID={link_id} | URL={url}")
+        elif cozum:
             record.resolved_url = cozum
             record.status = "success"
             
@@ -44,6 +56,7 @@ def run_bypass_process(link_id: int, url: str):
                 record.safety_status = "Error"
         else:
             record.status = "failed"
+            record.fail_reason = "unknown"
             log.warning(f"Bypass başarısız: ID={link_id} | URL={url}")
         
         db.commit()

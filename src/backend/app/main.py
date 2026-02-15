@@ -160,6 +160,7 @@ async def get_status(id: int, db: Session = Depends(get_db)):
         "status": record.status, 
         "resolved_url": record.resolved_url, 
         "safety_status": record.safety_status,
+        "fail_reason": record.fail_reason,
         "queue_position": position
     }
 
@@ -183,5 +184,6 @@ async def get_analysis(id: int, db: Session = Depends(get_db)):
         "original_url": record.original_url,
         "resolved_url": record.resolved_url,
         "safety_status": record.safety_status,
+        "fail_reason": record.fail_reason,
         "last_scanned_at": record.last_scanned_at
     }
