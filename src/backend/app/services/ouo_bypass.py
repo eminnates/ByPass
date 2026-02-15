@@ -7,24 +7,27 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from pyvirtualdisplay import Display
+from app.logger import get_logger
+
+_log = get_logger("ouo")
 
 class OuoAutoBypass:
     def __init__(self, debug_mode=False): # Debug modu eklendi
         self.debug_mode = debug_mode
         self.display = None
 
-        self.log(f"🔧 Başlatılıyor... (Debug Modu: {'AÇIK ✅' if debug_mode else 'KAPALI ❌'})")
+        _log.info(f"Başlatılıyor... (Debug Modu: {'AÇIK' if debug_mode else 'KAPALI'})")
 
         if not self.debug_mode:
-            self.log("🖥️ Sanal ekran (Xvfb) başlatılıyor...")
+            _log.info("Sanal ekran (Xvfb) başlatılıyor...")
             try:
                 self.display = Display(visible=0, size=(1920, 1080))
                 self.display.start()
-                self.log("✅ Sanal monitör aktif.")
+                _log.info("Sanal monitör aktif.")
             except Exception as e:
-                self.log(f"⚠️ Ekran hatası: {e}")
+                _log.warning(f"Ekran hatası: {e}")
         else:
-            self.log("👀 Debug modu açık: Tarayıcı gerçek ekranda açılacak.")
+            _log.info("Debug modu açık: Tarayıcı gerçek ekranda açılacak.")
 
         self.options = uc.ChromeOptions()
         
@@ -38,11 +41,10 @@ class OuoAutoBypass:
         self.options.add_argument("--password-store=basic")
         self.options.page_load_strategy = 'eager' 
         
-        self.log("✅ Tarayıcı konfigürasyonu tamam.")
+        _log.info("Tarayıcı konfigürasyonu tamam.")
 
     def log(self, mesaj):
-        zaman = datetime.datetime.now().strftime("%H:%M:%S")
-        print(f"[{zaman}] {mesaj}")
+        _log.info(mesaj)
 
     # --- YENİ EKLENEN FONKSİYON ---
     def hata_analiz_kaydet(self, driver, hata_tipi="genel"):

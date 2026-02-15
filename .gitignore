@@ -2,3 +2,4 @@
 .env
 __pycache__/
 hata_logs/
+logs/

@@ -1,14 +1,15 @@
 import requests
 import asyncio
-from datetime import datetime # datetime düzeltildi
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models import BypassLink
 from app.database import SessionLocal
-# Botlarını import et
+from app.logger import get_logger
 from .aylink_bypass import AyLinkBypassUltimate
 from .ouo_bypass import OuoAutoBypass
-# Yeni VT servisini import et
 from .virustotal import scan_url_with_virustotal
+
+log = get_logger("engine")
 
 def run_bypass_process(link_id: int, url: str):
     db: Session = SessionLocal()
@@ -31,19 +32,19 @@ def run_bypass_process(link_id: int, url: str):
             
             # --- VIRUSTOTAL CHECK ---
             try:
-                # Async fonksiyonu senkron içinde çalıştır
-                print(f"🛡️ VT Taraması başlıyor: {cozum}")
+                log.info(f"VT Taraması başlıyor: {cozum}")
                 vt_status = asyncio.run(scan_url_with_virustotal(cozum))
                 
                 record.safety_status = vt_status
-                record.last_scanned_at = datetime.utcnow()
-                print(f"🛡️ Güvenlik Sonucu: {vt_status}")
+                record.last_scanned_at = datetime.now(timezone.utc)
+                log.info(f"Güvenlik Sonucu: {vt_status}")
                 
             except Exception as vt_err:
-                print(f"⚠️ VirusTotal hatası: {vt_err}")
+                log.warning(f"VirusTotal hatası: {vt_err}")
                 record.safety_status = "Error"
         else:
             record.status = "failed"
+            log.warning(f"Bypass başarısız: ID={link_id} | URL={url}")
         
         db.commit()
         
@@ -58,12 +59,12 @@ def run_bypass_process(link_id: int, url: str):
                     "safety_status": record.safety_status
                 }
                 requests.post(record.webhook_url, json=payload, timeout=5)
-                print(f"✅ Webhook gönderildi -> {record.webhook_url}")
+                log.info(f"Webhook gönderildi -> {record.webhook_url}")
             except Exception as w_err:
-                print(f"⚠️ Webhook başarısız: {w_err}")
+                log.warning(f"Webhook başarısız: {w_err}")
 
     except Exception as e:
-        print(f"❌ Genel Motor Hatası: {e}")
+        log.error(f"Genel Motor Hatası: {e}", exc_info=True)
         record.status = "error"
         db.commit()
     finally:

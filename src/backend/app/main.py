@@ -4,10 +4,13 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
 from urllib.parse import urlparse
 from . import models, database
+from .logger import get_logger
 from .services.engine_wrapper import run_bypass_process
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 import threading
+
+log = get_logger("api")
 
 ALLOWED_DOMAINS = [
     "ay.link",
@@ -49,21 +52,21 @@ def _tracked_bypass(link_id: int, url: str):
             _queue_list.remove(link_id)
         _active_id = link_id
     
-    print(f"🚀 İşlem başladı: ID={link_id} | Kuyrukta bekleyen: {len(_queue_list)}")
+    log.info(f"İşlem başladı: ID={link_id} | Kuyrukta bekleyen: {len(_queue_list)}")
     
     try:
         run_bypass_process(link_id, url)
     finally:
         with _queue_lock:
             _active_id = None
-        print(f"✅ İşlem bitti: ID={link_id} | Kuyrukta bekleyen: {len(_queue_list)}")
+        log.info(f"İşlem bitti: ID={link_id} | Kuyrukta bekleyen: {len(_queue_list)}")
 
 def submit_to_queue(link_id: int, url: str):
     """İşlemi kuyruğa ekler."""
     with _queue_lock:
         _queue_list.append(link_id)
     
-    print(f"📥 Kuyruğa eklendi: ID={link_id} | Sıra: {len(_queue_list)}")
+    log.info(f"Kuyruğa eklendi: ID={link_id} | Sıra: {len(_queue_list)}")
     bypass_executor.submit(_tracked_bypass, link_id, url)
 
 def get_queue_position(link_id: int) -> Optional[int]:
@@ -115,7 +118,7 @@ async def bypass_url(req: LinkRequest, db: Session = Depends(get_db)):
             position = get_queue_position(cached_link.id)
             return {"status": "pending", "id": cached_link.id, "queue_position": position, "message": "İşleniyor, lütfen bekleyin."}
         elif cached_link.status == "failed" or cached_link.status == "error":
-            print(f"♻️ Retrying failed link: {url}")
+            log.info(f"Başarısız link tekrar deneniyor: {url}")
             
             cached_link.status = "pending"
             cached_link.safety_status = None

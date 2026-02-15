@@ -3,15 +3,18 @@ import os
 import base64
 import asyncio
 from dotenv import load_dotenv
+from app.logger import get_logger
 
 load_dotenv()
+
+log = get_logger("virustotal")
 
 VIRUSTOTAL_API_KEY = os.getenv("VT_API_KEY") 
 BASE_URL = "https://www.virustotal.com/api/v3"
 
 async def scan_url_with_virustotal(url: str):
     if not VIRUSTOTAL_API_KEY:
-        print("⚠️ VT_API_KEY bulunamadı! .env dosyasını kontrol et.")
+        log.warning("VT_API_KEY bulunamadı! .env dosyasını kontrol et.")
         return "Unknown"
 
     headers = {"x-apikey": VIRUSTOTAL_API_KEY}
@@ -19,7 +22,7 @@ async def scan_url_with_virustotal(url: str):
     try:
         url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
     except Exception as e:
-        print(f"⚠️ URL Encode Hatası: {e}")
+        log.error(f"URL Encode Hatası: {e}")
         return "Error"
 
     async with httpx.AsyncClient() as client:
@@ -32,15 +35,13 @@ async def scan_url_with_virustotal(url: str):
                 return parse_vt_stats(stats)
             
             # 2. YENİ TARAMA BAŞLATMA
-            print(f"🔍 VT Raporu yok, yeni tarama başlatılıyor: {url}")
+            log.info(f"VT Raporu yok, yeni tarama başlatılıyor: {url}")
             scan_resp = await client.post(f"{BASE_URL}/urls", data={"url": url}, headers=headers)
             
-            # --- HATA AYIKLAMA KISMI EKLENDİ ---
             if scan_resp.status_code != 200:
-                print(f"❌ VT Tarama Hatası (Kod: {scan_resp.status_code})")
-                print(f"❌ VT Cevabı: {scan_resp.text}") # Hatanın detayını burası söyleyecek
+                log.error(f"VT Tarama Hatası (Kod: {scan_resp.status_code})")
+                log.error(f"VT Cevabı: {scan_resp.text}")
                 return "Error"
-            # -----------------------------------
                 
             analysis_id = scan_resp.json()["data"]["id"]
             analysis_url = f"{BASE_URL}/analyses/{analysis_id}"
@@ -58,7 +59,7 @@ async def scan_url_with_virustotal(url: str):
             return "Timeout"
             
         except Exception as e:
-            print(f"❌ VT Kritik Hata: {e}") # Hatayı tam görelim
+            log.error(f"VT Kritik Hata: {e}", exc_info=True)
             return "Error"
 
 def parse_vt_stats(stats):
