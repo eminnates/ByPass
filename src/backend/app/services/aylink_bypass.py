@@ -10,24 +10,27 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
 from pyvirtualdisplay import Display
+from app.logger import get_logger
+
+_log = get_logger("aylink")
 
 class AyLinkBypassUltimate:
     def __init__(self, debug_mode=False):
         self.debug_mode = debug_mode
         self.display = None
 
-        self.log(f"🔧 Başlatılıyor... (Debug Modu: {'AÇIK ✅' if debug_mode else 'KAPALI ❌'})")
+        _log.info(f"Başlatılıyor... (Debug Modu: {'AÇIK' if debug_mode else 'KAPALI'})")
 
         if not self.debug_mode:
-            self.log("🖥️ Sanal Ekran (GUI) hazırlanıyor...")
+            _log.info("Sanal Ekran (GUI) hazırlanıyor...")
             try:
                 self.display = Display(visible=0, size=(1920, 1080))
                 self.display.start()
-                self.log("✅ Sanal monitör aktif (Arka plan modu).")
+                _log.info("Sanal monitör aktif (Arka plan modu).")
             except Exception as e:
-                self.log(f"⚠️ Ekran hatası: {e}")
+                _log.warning(f"Ekran hatası: {e}")
         else:
-            self.log("👀 Debug modu açık: Tarayıcı gerçek ekranda açılacak.")
+            _log.info("Debug modu açık: Tarayıcı gerçek ekranda açılacak.")
 
         self.options = uc.ChromeOptions()
         self.options.add_argument('--no-sandbox')
@@ -46,8 +49,7 @@ class AyLinkBypassUltimate:
         self.options.page_load_strategy = 'normal'
 
     def log(self, mesaj):
-        zaman = datetime.datetime.now().strftime("%H:%M:%S")
-        print(f"[{zaman}] {mesaj}")
+        _log.info(mesaj)
 
     def hata_analiz_kaydet(self, driver, hata_tipi="genel"):
         try:
