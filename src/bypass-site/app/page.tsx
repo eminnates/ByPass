@@ -231,6 +231,7 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState('');
   const [resultLink, setResultLink] = useState('');
   const [error, setError] = useState('');
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
   const t = translations[lang] || translations['tr']; // Hata önlemek için fallback
@@ -238,7 +239,7 @@ export default function Home() {
   // --- API İSTEK FONKSİYONU ---
   const handleBypass = async () => {
     if (!url) return;
-    
+
     setIsLoading(true);
     setError('');
     setResultLink('');
@@ -255,10 +256,9 @@ export default function Home() {
       const data = await response.json();
 
       if (data.status === 'success') {
-        // Cache'den geldiyse hemen bitir
         finishProcess(data.resolved_url);
       } else if (data.status === 'started' || data.status === 'pending') {
-        // İşlem başladı, ID'yi alıp sormaya başla (Polling)
+        if (data.queue_position != null) setQueuePosition(data.queue_position);
         pollStatus(data.id || data.check_id);
       } else {
         setError('Beklenmedik bir hata oluştu.');
@@ -274,27 +274,49 @@ export default function Home() {
   // --- SÜREKLİ DURUM SORMA (POLLING) ---
   const pollStatus = (id: number) => {
     setStatusMessage('Link çözülüyor, lütfen bekleyin...');
-    
+    let attempts = 0;
+    const MAX_ATTEMPTS = 40; // 40 × 3s = 120sn max
+
     const interval = setInterval(async () => {
+      if (++attempts > MAX_ATTEMPTS) {
+        clearInterval(interval);
+        setError('İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.');
+        setIsLoading(false);
+        setQueuePosition(null);
+        return;
+      }
+
       try {
         const res = await fetch(`http://127.0.0.1:8000/status/${id}`);
         const data = await res.json();
 
+        // Kuyruk pozisyonunu güncelle
+        if (data.queue_position != null) {
+          setQueuePosition(data.queue_position);
+          if (data.queue_position === 0) {
+            setStatusMessage('Linkiniz şu an işleniyor...');
+          } else {
+            setStatusMessage(`Sırada ${data.queue_position}. sıradasınız...`);
+          }
+        }
+
         if (data.status === 'success') {
           clearInterval(interval);
+          setQueuePosition(null);
           finishProcess(data.resolved_url);
         } else if (data.status === 'failed' || data.status === 'error') {
           clearInterval(interval);
+          setQueuePosition(null);
           setError('Link çözülemedi. Lütfen tekrar deneyin.');
           setIsLoading(false);
         }
-        // pending ise devam et...
       } catch (e) {
         clearInterval(interval);
+        setQueuePosition(null);
         setError('Bağlantı koptu.');
         setIsLoading(false);
       }
-    }, 3000); // 3 saniyede bir sor
+    }, 3000);
   };
 
   // --- İŞLEM BİTİŞİ ---
@@ -374,15 +396,15 @@ export default function Home() {
                 disabled={isLoading}
                 className="w-full bg-transparent py-4 outline-none text-lg disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <button 
-                onClick={() => navigator.clipboard.readText().then(setUrl)} 
+              <button
+                onClick={() => navigator.clipboard.readText().then(setUrl)}
                 disabled={isLoading}
                 className="p-2 hover:text-green-400 transition-colors disabled:opacity-50"
               >
                 <Clipboard size={22} />
               </button>
             </div>
-            <button 
+            <button
               onClick={handleBypass}
               disabled={isLoading || !url}
               className={`md:w-64 text-white font-bold py-4 px-8 rounded-xl transition-all flex items-center justify-center gap-3 text-lg shadow-lg active:scale-95
@@ -390,10 +412,10 @@ export default function Home() {
               `}
             >
               {isLoading ? (
-                 <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>{t.hero.processing}</span>
-                 </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>{t.hero.processing}</span>
+                </div>
               ) : (
                 <>
                   {t.hero.button} <ArrowRight size={22} />
@@ -403,7 +425,7 @@ export default function Home() {
           </div>
 
           {/* --- SONUÇ VE DURUM ALANI --- */}
-          
+
           {/* Hata Mesajı */}
           {error && (
             <div className="p-4 bg-red-500/10 border border-red-500/50 rounded-xl text-red-400 text-center font-medium animate-in fade-in">
@@ -413,8 +435,22 @@ export default function Home() {
 
           {/* Durum Mesajı (Sadece yüklenirken ve hata yoksa) */}
           {isLoading && !error && (
-            <div className="text-center text-sm text-gray-400 animate-pulse">
-              {statusMessage}
+            <div className="text-center space-y-2">
+              <div className="text-sm text-gray-400 animate-pulse">
+                {statusMessage}
+              </div>
+              {queuePosition != null && queuePosition > 0 && (
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-yellow-50 text-yellow-600 border border-yellow-200'}`}>
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                  Kuyrukta {queuePosition}. sırada
+                </div>
+              )}
+              {queuePosition === 0 && (
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-green-50 text-green-600 border border-green-200'}`}>
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                  Şu an işleniyor
+                </div>
+              )}
             </div>
           )}
 
@@ -422,7 +458,7 @@ export default function Home() {
           {resultLink && (
             <div className={`p-6 rounded-2xl border animate-in zoom-in-95 duration-300 flex flex-col gap-4
               ${isDarkMode ? 'bg-green-900/10 border-green-500/30' : 'bg-green-50 border-green-200'}`}>
-              
+
               <div className="flex items-center justify-between">
                 <span className="font-bold text-green-500 flex items-center gap-2">
                   <CheckCircle size={20} /> {t.hero.success}
@@ -431,18 +467,18 @@ export default function Home() {
               </div>
 
               <div className={`flex items-center gap-2 p-3 rounded-lg ${isDarkMode ? 'bg-black/40' : 'bg-white border'}`}>
-                <input 
-                  readOnly 
-                  value={resultLink} 
-                  className="bg-transparent w-full outline-none text-sm text-gray-500" 
+                <input
+                  readOnly
+                  value={resultLink}
+                  className="bg-transparent w-full outline-none text-sm text-gray-500"
                 />
-                <a 
-                  href={resultLink} 
-                  target="_blank" 
+                <a
+                  href={resultLink}
+                  target="_blank"
                   rel="noreferrer"
                   className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-2"
                 >
-                  {t.hero.go} <Globe size={16}/>
+                  {t.hero.go} <Globe size={16} />
                 </a>
               </div>
             </div>
