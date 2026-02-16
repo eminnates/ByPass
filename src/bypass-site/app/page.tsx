@@ -47,7 +47,7 @@ const translations: any = {
       q1: "Paylaşılan Linkler (Pastes) Destekleniyor mu?", a1: "Evet, servisimiz popüler paste servislerini destekler.",
       q2: "Hangi web siteleri destekleniyor?", a2: "Linkvertise, Lootlabs, Mboost, Sub2get ve daha birçok popüler servis.",
       q3: "Hata alırsam ne yapmalıyım?", a3: "Bir hata ile karşılaşırsanız sayfayı yenilemeyi deneyin.", note: "NOT: Hata devam ederse Discord'a gelin.",
-      q4: "Bypass.link ücretsiz mi?", a4: "Evet, servisimiz tamamen ücretsizdir.",
+      q4: "ReklamAtla.com ücretsiz mi?", a4: "Evet, servisimiz tamamen ücretsizdir.",
       q5: "Discord botu var mı?", a5: "Şu an için aktif bir botumuz bulunmamaktadır."
     },
     footer: { privacy: "Gizlilik Politikası", terms: "Kullanım Şartları", contact: "İletişim", rights: "Tüm hakları saklıdır." }
@@ -86,7 +86,7 @@ const translations: any = {
       q1: "Are Paste Links Supported?", a1: "Yes, we support popular paste services.",
       q2: "Which websites are supported?", a2: "Linkvertise, Lootlabs, Mboost, Sub2get and many more.",
       q3: "What if I get an error?", a3: "Try refreshing the page if you encounter an error.", note: "NOTE: Join Discord if error persists.",
-      q4: "Is Bypass.link free?", a4: "Yes, our service is completely free.",
+      q4: "Is ReklamAtla.com free?", a4: "Yes, our service is completely free.",
       q5: "Is there a Discord bot?", a5: "We do not have an active bot at the moment."
     },
     footer: { privacy: "Privacy Policy", terms: "Terms of Use", contact: "Contact", rights: "All rights reserved." }
@@ -257,7 +257,7 @@ const Header = ({ isDarkMode, toggleTheme, currentLang, setLang, t }: any) => (
         <div className={`w-10 h-10 border rounded flex items-center justify-center ${isDarkMode ? 'bg-[#121212] border-white/20' : 'bg-gray-100 border-gray-300'}`}>
           <Plug size={20} className={isDarkMode ? "text-purple-400" : "text-purple-600"} />
         </div>
-        <span className="font-bold text-xl tracking-tight ml-2">Bypass.link</span>
+        <span className="font-bold text-xl tracking-tight ml-2">ReklamAtla</span>
       </div>
 
       <nav className="hidden md:flex items-center gap-6">
@@ -524,7 +524,7 @@ export default function Home() {
       <div className="w-full max-w-5xl px-4 pt-[220px] pb-12 z-10 flex flex-col items-center justify-center">
         <div className="text-center mb-12 relative">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight italic">
-            <span className="text-purple-500 drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]">Bypass</span>.link
+            <span className="text-purple-500 drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]">ReklamAtla</span>.com
           </h1>
           {isDarkMode && <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-64 h-32 bg-purple-600/20 blur-[100px] rounded-full" />}
         </div>
@@ -718,7 +718,7 @@ export default function Home() {
           </Link>
           <a href="mailto:support@bypass.link" className="hover:text-purple-400 transition">{t.footer.contact}</a>
         </div>
-        <p>&copy; 2026 Bypass.link Servisi. {t.footer.rights}</p>
+        <p>&copy; 2026 ReklamAtla.com Servisi. {t.footer.rights}</p>
       </footer>
 
     </main>
