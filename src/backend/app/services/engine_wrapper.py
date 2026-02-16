@@ -85,7 +85,7 @@ def run_bypass_process(link_id: int, url: str):
         if record.status == "success" and cozum:
             vt_thread = threading.Thread(
                 target=_vt_scan_background,
-                args=(link_id, cozum),
+                args=(link_id, url),
                 daemon=True
             )
             vt_thread.start()

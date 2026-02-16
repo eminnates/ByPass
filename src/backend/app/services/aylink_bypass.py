@@ -175,7 +175,7 @@ class AyLinkBypassUltimate:
 
     def baslat(self, url):
         self.log(f"🚀 SÜREÇ BAŞLIYOR: {url}")
-        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=143)
+        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=145)
         hedef_link = None
 
         try:
