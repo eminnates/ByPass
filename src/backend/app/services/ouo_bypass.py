@@ -140,7 +140,7 @@ class OuoAutoBypass:
     def hedef_linki_bul(self, baslangic_url):
         self.log(f"🚀 SÜREÇ BAŞLATILIYOR: {baslangic_url}")
         
-        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=143)
+        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=145)
         bulunan_link = None
         
         try:

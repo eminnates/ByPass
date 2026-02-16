@@ -20,6 +20,19 @@ const translations: any = {
       success: "Bypass Başarılı!",
       go: "Git"
     },
+    queue: {
+      connecting: "Sunucuya bağlanılıyor...",
+      resolving: "Link çözülüyor, lütfen bekleyin...",
+      processing: "Linkiniz şu an işleniyor...",
+      inQueue: "Kuyrukta",
+      position: "sırada",
+      timeout: "İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.",
+      connectionLost: "Bağlantı koptu.",
+      serverDown: "Sunucuya erişilemedi. Backend çalışıyor mu?",
+      unexpected: "Beklenmedik bir hata oluştu.",
+      retryFailed: "Link çözülemedi. Lütfen tekrar deneyin.",
+      notFound: "Bu link artık geçerli değil veya kaldırılmış (404)."
+    },
     stats: { bypassed: "Bugün Çözülen Link", active: "Aktif Kullanıcı" },
     features: {
       site: { title: "Desteklenen Siteler", desc: "Linkvertise, Lootlabs, Mboost ve dahası." },
@@ -46,6 +59,19 @@ const translations: any = {
       success: "Bypass Successful!",
       go: "Go"
     },
+    queue: {
+      connecting: "Connecting to server...",
+      resolving: "Resolving link, please wait...",
+      processing: "Your link is being processed...",
+      inQueue: "In Queue",
+      position: "position",
+      timeout: "Operation timed out. Please try again.",
+      connectionLost: "Connection lost.",
+      serverDown: "Cannot reach server. Is backend running?",
+      unexpected: "An unexpected error occurred.",
+      retryFailed: "Could not resolve link. Please try again.",
+      notFound: "This link is no longer valid or has been removed (404)."
+    },
     stats: { bypassed: "Links Bypassed Today", active: "Active Users" },
     features: {
       site: { title: "Supported Sites", desc: "Linkvertise, Lootlabs, Mboost and more." },
@@ -65,6 +91,7 @@ const translations: any = {
   de: {
     nav: { home: "Startseite", coffee: "Kaffee Kaufen", discord: "Discord" },
     hero: { placeholder: "Link hier einfügen...", button: "UMGEHEN", processing: "Verarbeitung...", autoRedirect: "Auto-Weiterleitung", success: "Bypass Erfolgreich!", go: "Los" },
+    queue: { connecting: "Verbindung wird hergestellt...", resolving: "Link wird aufgelöst...", processing: "Ihr Link wird gerade verarbeitet...", inQueue: "In der Warteschlange", position: "Position", timeout: "Zeitüberschreitung. Bitte erneut versuchen.", connectionLost: "Verbindung verloren.", serverDown: "Server nicht erreichbar.", unexpected: "Ein unerwarteter Fehler ist aufgetreten.", retryFailed: "Link konnte nicht aufgelöst werden.", notFound: "Dieser Link ist nicht mehr gültig (404)." },
     stats: { bypassed: "Heute Umgangen", active: "Aktive Nutzer" },
     features: {
       site: { title: "Unterstützte Seiten", desc: "Linkvertise, Lootlabs, Mboost und mehr." },
@@ -84,6 +111,7 @@ const translations: any = {
   es: {
     nav: { home: "Inicio", coffee: "Comprar Café", discord: "Discord" },
     hero: { placeholder: "Pega un enlace aquí...", button: "SALTAR", processing: "Procesando...", autoRedirect: "Redirección Auto", success: "¡Bypass Exitoso!", go: "Ir" },
+    queue: { connecting: "Conectando al servidor...", resolving: "Resolviendo enlace...", processing: "Su enlace está siendo procesado...", inQueue: "En cola", position: "posición", timeout: "Tiempo agotado. Intente de nuevo.", connectionLost: "Conexión perdida.", serverDown: "No se puede acceder al servidor.", unexpected: "Ocurrió un error inesperado.", retryFailed: "No se pudo resolver el enlace.", notFound: "Este enlace ya no es válido (404)." },
     stats: { bypassed: "Saltados Hoy", active: "Usuarios Activos" },
     features: {
       site: { title: "Sitios Soportados", desc: "Linkvertise, Lootlabs, Mboost y más." },
@@ -103,6 +131,7 @@ const translations: any = {
   ru: {
     nav: { home: "Главная", coffee: "Купить кофе", discord: "Discord" },
     hero: { placeholder: "Вставьте ссылку...", button: "ОБОЙТИ", processing: "Обработка...", autoRedirect: "Авто-перенаправление", success: "Обход Успешен!", go: "Перейти" },
+    queue: { connecting: "Подключение к серверу...", resolving: "Разрешение ссылки...", processing: "Ваша ссылка обрабатывается...", inQueue: "В очереди", position: "позиция", timeout: "Время ожидания истекло. Попробуйте снова.", connectionLost: "Соединение потеряно.", serverDown: "Сервер недоступен.", unexpected: "Произошла неожиданная ошибка.", retryFailed: "Не удалось разрешить ссылку.", notFound: "Эта ссылка больше не действительна (404)." },
     stats: { bypassed: "Обойдено сегодня", active: "Активные пользователи" },
     features: {
       site: { title: "Поддерживаемые сайты", desc: "Linkvertise, Lootlabs, Mboost и другие." },
@@ -310,7 +339,7 @@ export default function Home() {
     setResultLink('');
     setSafetyStatus(null);
     setBypassId(null);
-    setStatusMessage('Sunucuya bağlanılıyor...');
+    setStatusMessage(t.queue.connecting);
 
     try {
       // 1. İSTEK: İşlemi Başlat
@@ -328,26 +357,26 @@ export default function Home() {
         if (data.queue_position != null) setQueuePosition(data.queue_position);
         pollStatus(data.id || data.check_id);
       } else {
-        setError('Beklenmedik bir hata oluştu.');
+        setError(t.queue.unexpected);
         setIsLoading(false);
       }
 
     } catch (err) {
-      setError('Sunucuya erişilemedi. Backend çalışıyor mu?');
+      setError(t.queue.serverDown);
       setIsLoading(false);
     }
   };
 
   // --- SÜREKLİ DURUM SORMA (POLLING) ---
   const pollStatus = (id: number) => {
-    setStatusMessage('Link çözülüyor, lütfen bekleyin...');
+    setStatusMessage(t.queue.resolving);
     let attempts = 0;
     const MAX_ATTEMPTS = 40; // 40 × 3s = 120sn max
 
     const interval = setInterval(async () => {
       if (++attempts > MAX_ATTEMPTS) {
         clearInterval(interval);
-        setError('İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.');
+        setError(t.queue.timeout);
         setIsLoading(false);
         setQueuePosition(null);
         return;
@@ -361,9 +390,9 @@ export default function Home() {
         if (data.queue_position != null) {
           setQueuePosition(data.queue_position);
           if (data.queue_position === 0) {
-            setStatusMessage('Linkiniz şu an işleniyor...');
+            setStatusMessage(t.queue.processing);
           } else {
-            setStatusMessage(`Sırada ${data.queue_position}. sıradasınız...`);
+            setStatusMessage(`${t.queue.inQueue} ${data.queue_position}. ${t.queue.position}...`);
           }
         }
 
@@ -377,11 +406,11 @@ export default function Home() {
 
           // fail_reason'a göre özel hata mesajı
           if (data.fail_reason === 'link_not_found') {
-            setError('Bu link artık geçerli değil veya kaldırılmış (404).');
+            setError(t.queue.notFound);
           } else if (data.fail_reason === 'timeout') {
-            setError('İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.');
+            setError(t.queue.timeout);
           } else {
-            setError('Link çözülemedi. Lütfen tekrar deneyin.');
+            setError(t.queue.retryFailed);
           }
 
           setIsLoading(false);
@@ -389,7 +418,7 @@ export default function Home() {
       } catch (e) {
         clearInterval(interval);
         setQueuePosition(null);
-        setError('Bağlantı koptu.');
+        setError(t.queue.connectionLost);
         setIsLoading(false);
       }
     }, 3000);
@@ -567,13 +596,13 @@ export default function Home() {
               {queuePosition != null && queuePosition > 0 && (
                 <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-yellow-50 text-yellow-600 border border-yellow-200'}`} >
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
-                  Kuyrukta {queuePosition}. sırada
+                  {t.queue.inQueue} {queuePosition}. {t.queue.position}
                 </div>
               )}
               {queuePosition === 0 && (
                 <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-purple-50 text-purple-600 border border-purple-200'}`}>
                   <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
-                  Şu an işleniyor
+                  {t.queue.processing}
                 </div>
               )}
             </div>

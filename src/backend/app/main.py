@@ -54,50 +54,79 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- KUYRUK SİSTEMİ ---
-# max_workers=1 → Aynı anda sadece 1 Chrome tarayıcı çalışır
-# Diğer istekler sırada bekler
-bypass_executor = ThreadPoolExecutor(max_workers=1)
+# --- KUYRUK SİSTEMİ (DUAL LANE) ---
+# Selenium domainleri (ağır, 30s+)
+SELENIUM_DOMAINS = {"ay.link", "ay.live", "ouo.io", "ouo.press"}
+
+# Fast lane: Redirect bypass'lar (hafif, <1sn)
+fast_executor = ThreadPoolExecutor(max_workers=5)
+# Heavy lane: Selenium bypass'lar (ağır, Chrome gerektirir)
+heavy_executor = ThreadPoolExecutor(max_workers=3)
 
 # Kuyruk takibi için thread-safe yapı
 _queue_lock = threading.Lock()
-_queue_list: list[int] = []        # Sırada bekleyen ID'ler
-_active_id: Optional[int] = None   # Şu an işlenen ID
+_heavy_queue: list[int] = []       # Selenium kuyruğunda bekleyenler
+_heavy_active: set[int] = set()    # Selenium aktif işlemler
+_fast_active: set[int] = set()     # Redirect aktif işlemler
 
-def _tracked_bypass(link_id: int, url: str):
-    """Kuyruk takibi ile bypass işlemini çalıştırır."""
-    global _active_id
-    
-    # Sıradan çıkar, aktif olarak işaretle
+def _is_heavy(url: str) -> bool:
+    """URL'nin Selenium gerektiren bir domain olup olmadığını kontrol eder."""
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc.lower().replace("www.", "")
+    return domain in SELENIUM_DOMAINS
+
+def _tracked_heavy_bypass(link_id: int, url: str):
+    """Selenium bypass — kuyruk takibi ile."""
     with _queue_lock:
-        if link_id in _queue_list:
-            _queue_list.remove(link_id)
-        _active_id = link_id
+        if link_id in _heavy_queue:
+            _heavy_queue.remove(link_id)
+        _heavy_active.add(link_id)
     
-    log.info(f"İşlem başladı: ID={link_id} | Kuyrukta bekleyen: {len(_queue_list)}")
+    log.info(f"[HEAVY] İşlem başladı: ID={link_id} | Aktif: {len(_heavy_active)} | Kuyrukta: {len(_heavy_queue)}")
     
     try:
         run_bypass_process(link_id, url)
     finally:
         with _queue_lock:
-            _active_id = None
-        log.info(f"İşlem bitti: ID={link_id} | Kuyrukta bekleyen: {len(_queue_list)}")
+            _heavy_active.discard(link_id)
+        log.info(f"[HEAVY] İşlem bitti: ID={link_id} | Aktif: {len(_heavy_active)} | Kuyrukta: {len(_heavy_queue)}")
+
+def _tracked_fast_bypass(link_id: int, url: str):
+    """Redirect bypass — anında işlenir, kuyruk yok."""
+    with _queue_lock:
+        _fast_active.add(link_id)
+    
+    log.info(f"[FAST] İşlem başladı: ID={link_id}")
+    
+    try:
+        run_bypass_process(link_id, url)
+    finally:
+        with _queue_lock:
+            _fast_active.discard(link_id)
+        log.info(f"[FAST] İşlem bitti: ID={link_id}")
 
 def submit_to_queue(link_id: int, url: str):
-    """İşlemi kuyruğa ekler."""
-    with _queue_lock:
-        _queue_list.append(link_id)
-    
-    log.info(f"Kuyruğa eklendi: ID={link_id} | Sıra: {len(_queue_list)}")
-    bypass_executor.submit(_tracked_bypass, link_id, url)
+    """Domain'e göre fast veya heavy lane'e yönlendirir."""
+    if _is_heavy(url):
+        with _queue_lock:
+            _heavy_queue.append(link_id)
+        log.info(f"[HEAVY] Kuyruğa eklendi: ID={link_id} | Sıra: {len(_heavy_queue)}")
+        heavy_executor.submit(_tracked_heavy_bypass, link_id, url)
+    else:
+        log.info(f"[FAST] Anında işleme alındı: ID={link_id}")
+        fast_executor.submit(_tracked_fast_bypass, link_id, url)
 
 def get_queue_position(link_id: int) -> Optional[int]:
-    """Verilen ID'nin kuyruktaki sırasını döner (1-indexed). Bulunamazsa None."""
+    """Verilen ID'nin kuyruktaki sırasını döner. Fast lane = her zaman 0."""
     with _queue_lock:
-        if _active_id == link_id:
-            return 0  # 0 = şu an işleniyor
-        if link_id in _queue_list:
-            return _queue_list.index(link_id) + 1
+        # Fast lane — her zaman anında işlenir
+        if link_id in _fast_active:
+            return 0
+        # Heavy lane — aktif veya sırada
+        if link_id in _heavy_active:
+            return 0
+        if link_id in _heavy_queue:
+            return _heavy_queue.index(link_id) + 1
     return None
 
 def get_db():
@@ -153,7 +182,7 @@ async def bypass_url(req: LinkRequest, db: Session = Depends(get_db)):
             return {
                 "status": "started", 
                 "id": cached_link.id,
-                "queue_position": len(_queue_list),
+                "queue_position": len(_heavy_queue),
                 "message": "Önceki işlem başarısızdı, tekrar kuyruğa alındı."
             }
     
@@ -167,7 +196,7 @@ async def bypass_url(req: LinkRequest, db: Session = Depends(get_db)):
     return {
         "status": "started", 
         "id": new_record.id, 
-        "queue_position": len(_queue_list),
+        "queue_position": len(_heavy_queue),
         "message": "İşlem kuyruğa alındı."
     }
 
@@ -191,9 +220,16 @@ async def get_status(id: int, db: Session = Depends(get_db)):
 async def get_queue_info():
     with _queue_lock:
         return {
-            "active_id": _active_id,
-            "waiting_count": len(_queue_list),
-            "waiting_ids": list(_queue_list)
+            "fast": {
+                "active_count": len(_fast_active),
+                "active_ids": list(_fast_active)
+            },
+            "heavy": {
+                "active_count": len(_heavy_active),
+                "active_ids": list(_heavy_active),
+                "waiting_count": len(_heavy_queue),
+                "waiting_ids": list(_heavy_queue)
+            }
         }
 
 @app.get("/analysis/{id}")
