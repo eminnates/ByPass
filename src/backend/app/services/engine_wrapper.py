@@ -8,6 +8,7 @@ from app.database import SessionLocal
 from app.logger import get_logger
 from .aylink_bypass import AyLinkBypassUltimate
 from .ouo_bypass import OuoAutoBypass
+from .redirect_bypass import resolve as redirect_resolve, domain_destekleniyor_mu
 from .virustotal import scan_url_with_virustotal
 
 log = get_logger("engine")
@@ -44,7 +45,13 @@ def run_bypass_process(link_id: int, url: str):
     try:
         # --- 1. BYPASS İŞLEMİ ---
         cozum = None
-        if "ay.link" in url or "ay.live" in url:
+        
+        # Katman 1: Basit HTTP redirect (Selenium yok, ~0.5sn)
+        if domain_destekleniyor_mu(url):
+            log.info(f"Basit redirect ile deneniyor: {url}")
+            cozum = redirect_resolve(url)
+        # Katman 2: Selenium bypass (ağır, ~30sn)
+        elif "ay.link" in url or "ay.live" in url:
             bot = AyLinkBypassUltimate(debug_mode=False)
             cozum = bot.baslat(url)
         elif "ouo" in url:
