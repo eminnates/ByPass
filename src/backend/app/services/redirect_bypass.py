@@ -13,37 +13,21 @@ from app.logger import get_logger
 _log = get_logger("redirect")
 
 # Desteklenen basit redirect domainleri
-REDIRECT_DOMAINS = [
-    "bit.ly",
-    "bit.do",
-    "tinyurl.com",
-    "t.co",
-    "is.gd",
-    "v.gd",
-    "rb.gy",
-    "shorturl.at",
-    "shorturl.asia",
-    "cutt.ly",
-    "tl.tc",
-    "s.id",
-    "t.ly",
-    "tiny.cc",
-    "ow.ly",
-    "buff.ly",
-    "adf.ly",
-    "bc.vc",
-    "soo.gd",
-    "goo.gl",
-    "rebrand.ly",
-]
+REDIRECT_DOMAINS = {  # set → O(1) lookup
+    "bit.ly", "bit.do", "tinyurl.com", "t.co", "is.gd", "v.gd",
+    "rb.gy", "shorturl.at", "shorturl.asia", "cutt.ly", "tl.tc",
+    "s.id", "t.ly", "tiny.cc", "ow.ly", "buff.ly", "adf.ly",
+    "bc.vc", "soo.gd", "goo.gl", "rebrand.ly",
+}
 
-# Gerçekçi User-Agent (bazı siteler bot UA'yı reddediyor)
-_HEADERS = {
+# Reusable Session → TCP connection pooling (DNS + handshake tasarrufu)
+_session = requests.Session()
+_session.headers.update({
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
-}
+})
 
 
 def domain_destekleniyor_mu(url: str) -> bool:
@@ -65,22 +49,20 @@ def resolve(url: str) -> str | None:
     
     try:
         # HEAD ile dene (daha hızlı)
-        response = requests.head(
+        response = _session.head(
             url,
-            headers=_HEADERS,
             allow_redirects=True,
-            timeout=10
+            timeout=8
         )
         
         final_url = response.url
         
         # Bazı siteler HEAD'e yanıt vermiyor, GET ile tekrar dene
         if final_url == url or response.status_code >= 400:
-            response = requests.get(
+            response = _session.get(
                 url,
-                headers=_HEADERS,
                 allow_redirects=True,
-                timeout=10
+                timeout=8
             )
             final_url = response.url
         

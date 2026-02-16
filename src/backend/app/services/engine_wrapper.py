@@ -1,5 +1,4 @@
 import requests
-import asyncio
 import threading
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
@@ -9,7 +8,7 @@ from app.logger import get_logger
 from .aylink_bypass import AyLinkBypassUltimate
 from .ouo_bypass import OuoAutoBypass
 from .redirect_bypass import resolve as redirect_resolve, domain_destekleniyor_mu
-from .virustotal import scan_url_with_virustotal
+from .virustotal import scan_url_with_virustotal_sync
 
 log = get_logger("engine")
 
@@ -18,7 +17,7 @@ def _vt_scan_background(link_id: int, url: str):
     db: Session = SessionLocal()
     try:
         log.info(f"VT arka plan taraması başlıyor: ID={link_id} | {url}")
-        vt_status = asyncio.run(scan_url_with_virustotal(url))
+        vt_status = scan_url_with_virustotal_sync(url)
         
         record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
         if record:

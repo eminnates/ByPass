@@ -1,5 +1,8 @@
 "use client";
 
+// --- API BASE URL (VPS'de .env.production'dan okunur) ---
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
@@ -343,7 +346,7 @@ export default function Home() {
 
     try {
       // 1. İSTEK: İşlemi Başlat
-      const response = await fetch('http://127.0.0.1:8000/bypass', {
+      const response = await fetch(`${API_BASE}/bypass`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url })
@@ -383,7 +386,7 @@ export default function Home() {
       }
 
       try {
-        const res = await fetch(`http://127.0.0.1:8000/status/${id}`);
+        const res = await fetch(`${API_BASE}/status/${id}`);
         const data = await res.json();
 
         // Kuyruk pozisyonunu güncelle
@@ -449,7 +452,7 @@ export default function Home() {
   const pollSafety = (linkId: number) => {
     const safetyInterval = setInterval(async () => {
       try {
-        const res = await fetch(`http://127.0.0.1:8000/status/${linkId}`);
+        const res = await fetch(`${API_BASE}/status/${linkId}`);
         const data = await res.json();
         if (data.safety_status && data.safety_status !== 'scanning') {
           setSafetyStatus(data.safety_status);

@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 # --- Log klasörünü oluştur ---
 LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
@@ -19,10 +20,10 @@ logging.basicConfig(
     format=LOG_FORMAT,
     datefmt=DATE_FORMAT,
     handlers=[
-        # Konsola yaz (renkli emoji'ler burada görünür)
+        # Konsola yaz
         logging.StreamHandler(),
-        # Dosyaya yaz (kalıcı kayıt)
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        # Dosyaya yaz (max 5MB, 3 yedek = en fazla 20MB disk)
+        RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=3, encoding="utf-8"),
     ],
 )
 
