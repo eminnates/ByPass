@@ -232,6 +232,8 @@ export default function Home() {
   const [resultLink, setResultLink] = useState('');
   const [error, setError] = useState('');
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [safetyStatus, setSafetyStatus] = useState<string | null>(null);
+  const [bypassId, setBypassId] = useState<number | null>(null);
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
   const t = translations[lang] || translations['tr']; // Hata önlemek için fallback
@@ -243,6 +245,8 @@ export default function Home() {
     setIsLoading(true);
     setError('');
     setResultLink('');
+    setSafetyStatus(null);
+    setBypassId(null);
     setStatusMessage('Sunucuya bağlanılıyor...');
 
     try {
@@ -256,7 +260,7 @@ export default function Home() {
       const data = await response.json();
 
       if (data.status === 'success') {
-        finishProcess(data.resolved_url);
+        finishProcess(data.resolved_url, data.id, data.safety_status);
       } else if (data.status === 'started' || data.status === 'pending') {
         if (data.queue_position != null) setQueuePosition(data.queue_position);
         pollStatus(data.id || data.check_id);
@@ -303,7 +307,7 @@ export default function Home() {
         if (data.status === 'success') {
           clearInterval(interval);
           setQueuePosition(null);
-          finishProcess(data.resolved_url);
+          finishProcess(data.resolved_url, id, data.safety_status);
         } else if (data.status === 'failed' || data.status === 'error') {
           clearInterval(interval);
           setQueuePosition(null);
@@ -329,10 +333,17 @@ export default function Home() {
   };
 
   // --- İŞLEM BİTİŞİ ---
-  const finishProcess = (finalUrl: string) => {
+  const finishProcess = (finalUrl: string, linkId?: number, initialSafety?: string) => {
     setResultLink(finalUrl);
     setIsLoading(false);
     setStatusMessage(t.hero.success);
+    setSafetyStatus(initialSafety || null);
+    if (linkId) setBypassId(linkId);
+
+    // VT taraması arka planda devam ediyorsa polling başlat
+    if (initialSafety === 'scanning' && linkId) {
+      pollSafety(linkId);
+    }
 
     if (autoRedirect) {
       setStatusMessage('Yönlendiriliyor...');
@@ -340,6 +351,24 @@ export default function Home() {
         window.location.href = finalUrl;
       }, 1500);
     }
+  };
+
+  // --- GÜVENLİK DURUMU POLLING ---
+  const pollSafety = (linkId: number) => {
+    const safetyInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/status/${linkId}`);
+        const data = await res.json();
+        if (data.safety_status && data.safety_status !== 'scanning') {
+          setSafetyStatus(data.safety_status);
+          clearInterval(safetyInterval);
+        }
+      } catch {
+        clearInterval(safetyInterval);
+      }
+    }, 3000);
+    // 30 saniye sonra durdur
+    setTimeout(() => clearInterval(safetyInterval), 30000);
   };
 
   const faqData = [
@@ -472,7 +501,34 @@ export default function Home() {
                 <span className="font-bold text-green-500 flex items-center gap-2">
                   <CheckCircle size={20} /> {t.hero.success}
                 </span>
-                {autoRedirect && <span className="text-xs text-gray-400 animate-pulse">Otomatik yönlendiriliyor...</span>}
+                <div className="flex items-center gap-2">
+                  {safetyStatus === 'scanning' && (
+                    <span className="text-xs text-yellow-400 flex items-center gap-1 animate-pulse">
+                      <Shield size={14} /> Güvenlik taranıyor...
+                    </span>
+                  )}
+                  {safetyStatus === 'Clean' && (
+                    <span className="text-xs text-green-400 flex items-center gap-1">
+                      <Shield size={14} /> Güvenli ✓
+                    </span>
+                  )}
+                  {safetyStatus === 'Malicious' && (
+                    <span className="text-xs text-red-400 flex items-center gap-1 font-bold">
+                      <Shield size={14} /> ⚠️ Tehlikeli!
+                    </span>
+                  )}
+                  {safetyStatus === 'Suspicious' && (
+                    <span className="text-xs text-orange-400 flex items-center gap-1">
+                      <Shield size={14} /> Şüpheli
+                    </span>
+                  )}
+                  {safetyStatus === 'Error' && (
+                    <span className="text-xs text-gray-400 flex items-center gap-1">
+                      <Shield size={14} /> Taranamadı
+                    </span>
+                  )}
+                  {autoRedirect && <span className="text-xs text-gray-400 animate-pulse">Otomatik yönlendiriliyor...</span>}
+                </div>
               </div>
 
               <div className={`flex items-center gap-2 p-3 rounded-lg ${isDarkMode ? 'bg-black/40' : 'bg-white border'}`}>
