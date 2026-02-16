@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Clipboard, ArrowRight, Zap, CheckCircle, Shield,
-  Moon, Sun, Key, Coffee, Plug, ChevronDown, ChevronUp, CheckCircle as CheckIcon, Globe
+  Moon, Sun, Coffee, Plug, ChevronDown, ChevronUp,
+  CheckCircle as CheckIcon, Globe, Loader2, Users, Activity
 } from 'lucide-react';
 
 // --- TERCÜME VERİTABANI (DİL PAKETİ) ---
@@ -15,10 +16,11 @@ const translations: any = {
       placeholder: "Başlamak için bir bağlantı girin...",
       button: "ATLA",
       autoRedirect: "Otomatik Yönlendirme",
-      processing: "İşleniyor...",
+      processing: "Çözülüyor...",
       success: "Bypass Başarılı!",
       go: "Git"
     },
+    stats: { bypassed: "Bugün Çözülen Link", active: "Aktif Kullanıcı" },
     features: {
       site: { title: "Desteklenen Siteler", desc: "Linkvertise, Lootlabs, Mboost ve dahası." },
       speed: { title: "Anında Yanıt", desc: "Bekleme süresi olmadan direkt hedefe ulaşın." },
@@ -40,10 +42,11 @@ const translations: any = {
       placeholder: "Paste a link to start...",
       button: "BYPASS",
       autoRedirect: "Auto Redirect",
-      processing: "Processing...",
+      processing: "Bypassing...",
       success: "Bypass Successful!",
       go: "Go"
     },
+    stats: { bypassed: "Links Bypassed Today", active: "Active Users" },
     features: {
       site: { title: "Supported Sites", desc: "Linkvertise, Lootlabs, Mboost and more." },
       speed: { title: "Instant Response", desc: "Reach the destination without waiting." },
@@ -59,13 +62,72 @@ const translations: any = {
     },
     footer: { privacy: "Privacy Policy", terms: "Terms of Use", contact: "Contact", rights: "All rights reserved." }
   },
-  // ... Diğer diller aynı kalıpta eklenebilir ...
+  de: {
+    nav: { home: "Startseite", coffee: "Kaffee Kaufen", discord: "Discord" },
+    hero: { placeholder: "Link hier einfügen...", button: "UMGEHEN", processing: "Verarbeitung...", autoRedirect: "Auto-Weiterleitung", success: "Bypass Erfolgreich!", go: "Los" },
+    stats: { bypassed: "Heute Umgangen", active: "Aktive Nutzer" },
+    features: {
+      site: { title: "Unterstützte Seiten", desc: "Linkvertise, Lootlabs, Mboost und mehr." },
+      speed: { title: "Sofortige Antwort", desc: "Ziel ohne Wartezeit erreichen." },
+      secure: { title: "Sicherer Bypass", desc: "Schützen Sie Ihr Gerät vor Werbung." }
+    },
+    faq: {
+      title: "Häufig Gestellt",
+      q1: "Werden Paste-Links unterstützt?", a1: "Ja, wir unterstützen gängige Dienste.",
+      q2: "Welche Webseiten?", a2: "Linkvertise, Lootlabs, Mboost und viele mehr.",
+      q3: "Was tun bei Fehlern?", a3: "Versuchen Sie, die Seite neu zu laden.", note: "HINWEIS: Kommen Sie bei Fehlern auf Discord.",
+      q4: "Ist es kostenlos?", a4: "Ja, unser Service ist komplett kostenlos.",
+      q5: "Gibt es einen Discord-Bot?", a5: "Derzeit haben wir keinen aktiven Bot."
+    },
+    footer: { privacy: "Datenschutz", terms: "Nutzungsbedingungen", contact: "Kontakt", rights: "Alle Rechte vorbehalten." }
+  },
+  es: {
+    nav: { home: "Inicio", coffee: "Comprar Café", discord: "Discord" },
+    hero: { placeholder: "Pega un enlace aquí...", button: "SALTAR", processing: "Procesando...", autoRedirect: "Redirección Auto", success: "¡Bypass Exitoso!", go: "Ir" },
+    stats: { bypassed: "Saltados Hoy", active: "Usuarios Activos" },
+    features: {
+      site: { title: "Sitios Soportados", desc: "Linkvertise, Lootlabs, Mboost y más." },
+      speed: { title: "Respuesta Instantánea", desc: "Llega al destino sin esperar." },
+      secure: { title: "Salto Seguro", desc: "Protege tu dispositivo de anuncios." }
+    },
+    faq: {
+      title: "Preguntas Frecuentes",
+      q1: "¿Enlaces Paste soportados?", a1: "Sí, soportamos servicios populares.",
+      q2: "¿Qué sitios web?", a2: "Linkvertise, Lootlabs, Mboost y muchos más.",
+      q3: "¿Error?", a3: "Intenta recargar la página.", note: "NOTA: Únete a Discord si persiste.",
+      q4: "¿Es gratis?", a4: "Sí, es completamente gratis.",
+      q5: "¿Hay bot de Discord?", a5: "No tenemos un bot activo actualmente."
+    },
+    footer: { privacy: "Privacidad", terms: "Términos", contact: "Contacto", rights: "Reservados todos los derechos." }
+  },
+  ru: {
+    nav: { home: "Главная", coffee: "Купить кофе", discord: "Discord" },
+    hero: { placeholder: "Вставьте ссылку...", button: "ОБОЙТИ", processing: "Обработка...", autoRedirect: "Авто-перенаправление", success: "Обход Успешен!", go: "Перейти" },
+    stats: { bypassed: "Обойдено сегодня", active: "Активные пользователи" },
+    features: {
+      site: { title: "Поддерживаемые сайты", desc: "Linkvertise, Lootlabs, Mboost и другие." },
+      speed: { title: "Мгновенный ответ", desc: "Достигайте цели без ожидания." },
+      secure: { title: "Безопасный обход", desc: "Защитите устройство от рекламы." }
+    },
+    faq: {
+      title: "Частые вопросы",
+      q1: "Поддерживаются ли Paste?", a1: "Да, мы поддерживаем популярные сервисы.",
+      q2: "Какие сайты?", a2: "Linkvertise, Lootlabs, Mboost и многие другие.",
+      q3: "Ошибка?", a3: "Попробуйте обновить страницу.", note: "ПРИМЕЧАНИЕ: Зайдите в Discord при ошибке.",
+      q4: "Это бесплатно?", a4: "Да, сервис полностью бесплатен.",
+      q5: "Есть ли бот?", a5: "На данный момент бота нет."
+    },
+    footer: { privacy: "Конфиденциальность", terms: "Условия", contact: "Контакты", rights: "Все права защищены." }
+  },
 };
 
 // Varsayılan dil listesi (Diğer dillerin translation objesinde olduğundan emin olun)
 const languages = [
   { code: 'tr', name: 'Türkçe', flag: '🇹🇷' },
   { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
 ];
 
 // --- ADSENSE REKLAM BİLEŞENİ ---
@@ -137,7 +199,7 @@ const LanguageSelector = ({ currentLang, setLang, isDarkMode }: any) => {
                 }}
                 className={`w-full flex items-center gap-3 px-4 py-3 text-sm transition-colors
                   ${currentLang === lang.code
-                    ? (isDarkMode ? 'bg-green-500/10 text-green-400' : 'bg-green-50 text-green-600')
+                    ? (isDarkMode ? 'bg-purple-500/10 text-purple-400' : 'bg-purple-50 text-purple-600')
                     : (isDarkMode ? 'text-gray-300 hover:bg-white/5' : 'text-gray-700 hover:bg-gray-50')
                   }
                 `}
@@ -161,7 +223,7 @@ const Header = ({ isDarkMode, toggleTheme, currentLang, setLang, t }: any) => (
     <div className="max-w-7xl w-full mx-auto flex items-center justify-between">
       <div className="flex items-center gap-2">
         <div className={`w-10 h-10 border rounded flex items-center justify-center ${isDarkMode ? 'bg-[#121212] border-white/20' : 'bg-gray-100 border-gray-300'}`}>
-          <Plug size={20} className={isDarkMode ? "text-green-400" : "text-green-600"} />
+          <Plug size={20} className={isDarkMode ? "text-purple-400" : "text-purple-600"} />
         </div>
         <span className="font-bold text-xl tracking-tight ml-2">Bypass.link</span>
       </div>
@@ -202,15 +264,15 @@ const FAQItem = ({ question, answer, isNote, isDarkMode }: any) => {
     <div className={`mb-3 border rounded-xl overflow-hidden transition-all duration-300 ${isDarkMode ? 'bg-[#121214] border-white/5' : 'bg-white border-gray-200 shadow-sm'}`}>
       <button onClick={() => setIsOpen(!isOpen)} className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
         <span className={`font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-800'}`}>{question}</span>
-        {isOpen ? <ChevronUp size={20} className="text-green-400" /> : <ChevronDown size={20} className="text-gray-500" />}
+        {isOpen ? <ChevronUp size={20} className="text-purple-400" /> : <ChevronDown size={20} className="text-gray-500" />}
       </button>
       <div className={`transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[500px] opacity-100 p-6 pt-0' : 'max-h-0 opacity-0 overflow-hidden'}`}>
         <div className={`text-sm leading-relaxed ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
           {answer}
           {isNote && (
-            <div className="mt-4 p-4 rounded-lg bg-green-500/5 border border-green-500/20">
-              <p className="text-xs font-bold text-green-400 uppercase tracking-wider mb-1">NOT:</p>
-              <p className="text-xs italic text-green-400/80">{isNote}</p>
+            <div className="mt-4 p-4 rounded-lg bg-purple-500/5 border border-purple-500/20">
+              <p className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-1">NOT:</p>
+              <p className="text-xs italic text-purple-400/80">{isNote}</p>
             </div>
           )}
         </div>
@@ -234,6 +296,7 @@ export default function Home() {
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const [safetyStatus, setSafetyStatus] = useState<string | null>(null);
   const [bypassId, setBypassId] = useState<number | null>(null);
+  const [stats, setStats] = useState({ links: 14205, users: 342 });
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
   const t = translations[lang] || translations['tr']; // Hata önlemek için fallback
@@ -379,6 +442,17 @@ export default function Home() {
     { question: t.faq.q5, answer: t.faq.a5 }
   ];
 
+  // İstatistik animasyonu
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStats(prev => ({
+        links: prev.links + Math.floor(Math.random() * 3) + 1,
+        users: prev.users + Math.floor(Math.random() * 4) - 1
+      }));
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <main className={`min-h-screen flex flex-col items-center relative overflow-x-hidden transition-colors duration-300 ${isDarkMode ? 'bg-[#0f0f11] text-white' : 'bg-[#f8f9fa] text-gray-900'}`}>
 
@@ -386,10 +460,10 @@ export default function Home() {
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: ${isDarkMode ? '#0a0a0c' : '#f1f5f9'}; }
         ::-webkit-scrollbar-thumb {
-          background: ${isDarkMode ? 'linear-gradient(to bottom, #22c55e, #16a34a)' : '#cbd5e1'};
+          background: ${isDarkMode ? 'linear-gradient(to bottom, #a855f7, #9333ea)' : '#c084fc'};
           border-radius: 20px;
         }
-        * { scrollbar-width: thin; scrollbar-color: ${isDarkMode ? '#22c55e #0a0a0c' : '#cbd5e1 #f1f5f9'}; }
+        * { scrollbar-width: thin; scrollbar-color: ${isDarkMode ? '#a855f7 #0a0a0c' : '#c084fc #f1f5f9'}; }
       `}</style>
 
       {/* HEADER */}
@@ -418,9 +492,9 @@ export default function Home() {
       <div className="w-full max-w-5xl px-4 pt-[220px] pb-12 z-10 flex flex-col items-center justify-center">
         <div className="text-center mb-12 relative">
           <h1 className="text-5xl md:text-6xl font-extrabold tracking-tight italic">
-            <span className="text-green-500 drop-shadow-[0_0_20px_rgba(34,197,94,0.6)]">Bypass</span>.link
+            <span className="text-purple-500 drop-shadow-[0_0_20px_rgba(168,85,247,0.6)]">Bypass</span>.link
           </h1>
-          {isDarkMode && <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-64 h-32 bg-green-600/20 blur-[100px] rounded-full" />}
+          {isDarkMode && <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-64 h-32 bg-purple-600/20 blur-[100px] rounded-full" />}
         </div>
 
         <div className="w-full max-w-4xl space-y-6">
@@ -437,7 +511,7 @@ export default function Home() {
               <button
                 onClick={() => navigator.clipboard.readText().then(setUrl)}
                 disabled={isLoading}
-                className="p-2 hover:text-green-400 transition-colors disabled:opacity-50"
+                className="p-2 hover:text-purple-400 transition-colors disabled:opacity-50"
               >
                 <Clipboard size={22} />
               </button>
@@ -445,13 +519,13 @@ export default function Home() {
             <button
               onClick={handleBypass}
               disabled={isLoading || !url}
-              className={`md:w-64 text-white font-bold py-4 px-8 rounded-xl transition-all flex items-center justify-center gap-3 text-lg shadow-lg active:scale-95
-                ${isLoading ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}
+              className={`md:w-64 text-white font-bold py-4 px-8 rounded-xl transition-all flex items-center justify-center gap-3 text-lg shadow-lg active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed
+                ${isLoading ? 'bg-gray-600 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500'}
               `}
             >
               {isLoading ? (
                 <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <Loader2 className="animate-spin" size={22} />
                   <span>{t.hero.processing}</span>
                 </div>
               ) : (
@@ -460,6 +534,19 @@ export default function Home() {
                 </>
               )}
             </button>
+          </div>
+
+          {/* İSTATİSTİK ALANI */}
+          <div className="flex flex-wrap justify-center gap-6 md:gap-12 mt-2 px-4 animate-in fade-in slide-in-from-top-2 duration-700">
+            <div className="flex items-center gap-3">
+              <div className="relative"><Activity size={20} className="text-purple-500" /><span className="absolute -top-1 -right-1 w-2 h-2 bg-purple-500 rounded-full animate-ping" /></div>
+              <div className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{t.stats.bypassed}: <span className={`font-bold ml-1 text-lg ${isDarkMode ? 'text-white' : 'text-black'}`}>{stats.links.toLocaleString()}</span></div>
+            </div>
+            <div className="h-6 w-[1px] bg-gray-700/50 hidden md:block"></div>
+            <div className="flex items-center gap-3">
+              <div className="relative"><Users size={20} className="text-blue-500" /></div>
+              <div className={`text-sm font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{t.stats.active}: <span className={`font-bold ml-1 text-lg ${isDarkMode ? 'text-white' : 'text-black'}`}>{stats.users.toLocaleString()}</span></div>
+            </div>
           </div>
 
           {/* --- SONUÇ VE DURUM ALANI --- */}
@@ -478,14 +565,14 @@ export default function Home() {
                 {statusMessage}
               </div>
               {queuePosition != null && queuePosition > 0 && (
-                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-yellow-50 text-yellow-600 border border-yellow-200'}`}>
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-yellow-50 text-yellow-600 border border-yellow-200'}`} >
                   <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
                   Kuyrukta {queuePosition}. sırada
                 </div>
               )}
               {queuePosition === 0 && (
-                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-green-50 text-green-600 border border-green-200'}`}>
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium ${isDarkMode ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-purple-50 text-purple-600 border border-purple-200'}`}>
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse" />
                   Şu an işleniyor
                 </div>
               )}
@@ -495,10 +582,10 @@ export default function Home() {
           {/* BAŞARILI SONUÇ KARTI */}
           {resultLink && (
             <div className={`p-6 rounded-2xl border animate-in zoom-in-95 duration-300 flex flex-col gap-4
-              ${isDarkMode ? 'bg-green-900/10 border-green-500/30' : 'bg-green-50 border-green-200'}`}>
+              ${isDarkMode ? 'bg-purple-900/10 border-purple-500/30' : 'bg-purple-50 border-purple-200'}`}>
 
               <div className="flex items-center justify-between">
-                <span className="font-bold text-green-500 flex items-center gap-2">
+                <span className="font-bold text-purple-500 flex items-center gap-2">
                   <CheckCircle size={20} /> {t.hero.success}
                 </span>
                 <div className="flex items-center gap-2">
@@ -541,7 +628,7 @@ export default function Home() {
                   href={resultLink}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-2"
                 >
                   {t.hero.go} <Globe size={16} />
                 </a>
@@ -551,7 +638,7 @@ export default function Home() {
 
           <div className="flex items-center justify-center gap-6">
             <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setAutoRedirect(!autoRedirect)}>
-              <div className={`w-10 h-5 rounded-full p-1 transition-colors ${autoRedirect ? 'bg-green-600' : 'bg-gray-600'}`}>
+              <div className={`w-10 h-5 rounded-full p-1 transition-colors ${autoRedirect ? 'bg-purple-600' : 'bg-gray-600'}`}>
                 <div className={`w-3 h-3 bg-white rounded-full transition-transform ${autoRedirect ? 'translate-x-5' : 'translate-x-0'}`} />
               </div>
               <span className={`text-sm font-medium transition-colors ${isDarkMode ? 'text-gray-400 group-hover:text-white' : 'text-gray-600 group-hover:text-black'}`}>{t.hero.autoRedirect}</span>
@@ -561,13 +648,13 @@ export default function Home() {
       </div>
 
       {/* ÖZELLİKLER */}
-      <div className="w-full max-w-5xl px-4 py-20 grid grid-cols-1 md:grid-cols-3 gap-6 z-20">
+      <div className="w-full max-w-5xl px-4 py-12 grid grid-cols-1 md:grid-cols-3 gap-6 z-20">
         {[
-          { icon: <CheckCircle className="text-emerald-400" />, title: t.features.site.title, desc: t.features.site.desc },
+          { icon: <CheckCircle className="text-purple-400" />, title: t.features.site.title, desc: t.features.site.desc },
           { icon: <Zap className="text-yellow-400" />, title: t.features.speed.title, desc: t.features.speed.desc },
-          { icon: <Shield className="text-green-400" />, title: t.features.secure.title, desc: t.features.secure.desc }
+          { icon: <Shield className="text-fuchsia-400" />, title: t.features.secure.title, desc: t.features.secure.desc }
         ].map((f, i) => (
-          <div key={i} className={`p-8 rounded-3xl border transition-all ${isDarkMode ? 'bg-[#121214] border-white/5 hover:border-green-500/30' : 'bg-white border-gray-100 shadow-md hover:border-green-300'}`}>
+          <div key={i} className={`p-8 rounded-3xl border transition-all ${isDarkMode ? 'bg-[#121214] border-white/5 hover:border-purple-500/30' : 'bg-white border-gray-100 shadow-md hover:border-purple-300'}`}>
             <div className="mb-4">{f.icon}</div>
             <h3 className="text-xl font-bold mb-2">{f.title}</h3>
             <p className="text-sm opacity-60 leading-relaxed">{f.desc}</p>
@@ -579,7 +666,7 @@ export default function Home() {
       <div className="w-full max-w-4xl px-4 pb-24 z-20">
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold mb-4">{t.faq.title}</h2>
-          <div className="w-16 h-1 bg-green-600 mx-auto rounded-full" />
+          <div className="w-16 h-1 bg-purple-600 mx-auto rounded-full" />
         </div>
         <div className="space-y-2">
           {faqData.map((item, index) => (
@@ -591,13 +678,13 @@ export default function Home() {
       {/* FOOTER */}
       <footer className={`w-full py-12 border-t text-center text-xs z-20 ${isDarkMode ? 'bg-black border-white/5 text-gray-500' : 'bg-white border-gray-200 text-gray-400'}`}>
         <div className="flex justify-center gap-8 mb-6 text-sm font-medium">
-          <Link href="/privacy" className="hover:text-green-400 transition">
+          <Link href="/privacy" className="hover:text-purple-400 transition">
             {t.footer.privacy}
           </Link>
-          <Link href="/terms" className="hover:text-green-400 transition">
+          <Link href="/terms" className="hover:text-purple-400 transition">
             {t.footer.terms}
           </Link>
-          <a href="mailto:support@bypass.link" className="hover:text-green-400 transition">{t.footer.contact}</a>
+          <a href="mailto:support@bypass.link" className="hover:text-purple-400 transition">{t.footer.contact}</a>
         </div>
         <p>&copy; 2026 Bypass.link Servisi. {t.footer.rights}</p>
       </footer>
