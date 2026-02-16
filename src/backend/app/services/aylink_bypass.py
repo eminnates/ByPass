@@ -24,7 +24,7 @@ class AyLinkBypassUltimate:
         if not self.debug_mode:
             _log.info("Sanal Ekran (GUI) hazırlanıyor...")
             try:
-                self.display = Display(visible=0, size=(1920, 1080))
+                self.display = Display(visible=0, size=(1280, 720))
                 self.display.start()
                 _log.info("Sanal monitör aktif (Arka plan modu).")
             except Exception as e:
@@ -33,19 +33,36 @@ class AyLinkBypassUltimate:
             _log.info("Debug modu açık: Tarayıcı gerçek ekranda açılacak.")
 
         self.options = uc.ChromeOptions()
+        
+        # --- TEMEL ---
         self.options.add_argument('--no-sandbox')
         self.options.add_argument('--disable-dev-shm-usage')
-        self.options.add_argument("--mute-audio")
+        self.options.add_argument("--disable-popup-blocking")
+        self.options.add_argument("--window-size=1280,720")
         
         # Bildirim İzni Fix'i
         prefs = {
             "profile.default_content_setting_values.notifications": 1
         }
         self.options.add_experimental_option("prefs", prefs)
-
-        self.options.add_argument("--disable-popup-blocking")
-        self.options.add_argument("--start-maximized")
-        self.options.add_argument("--window-size=1920,1080")
+        
+        # --- BELLEK TASARRUFU (VPS 2GB) ---
+        self.options.add_argument("--disable-gpu")
+        self.options.add_argument("--disable-software-rasterizer")
+        self.options.add_argument("--disable-extensions")
+        self.options.add_argument("--disable-translate")
+        self.options.add_argument("--disable-background-networking")
+        self.options.add_argument("--disable-sync")
+        self.options.add_argument("--disable-default-apps")
+        self.options.add_argument("--no-first-run")
+        self.options.add_argument("--mute-audio")
+        self.options.add_argument("--renderer-process-limit=1")
+        self.options.add_argument("--js-flags=--max-old-space-size=128")
+        self.options.add_argument("--disk-cache-size=1048576")  # 1MB cache
+        self.options.add_argument("--aggressive-cache-discard")
+        self.options.add_argument("--disable-features=TranslateUI,BlinkGenPropertyTrees")
+        self.options.add_argument("--blink-settings=imagesEnabled=false")  # Resimleri yükleme
+        
         self.options.page_load_strategy = 'eager'
 
     def log(self, mesaj):
@@ -175,20 +192,20 @@ class AyLinkBypassUltimate:
 
     def baslat(self, url):
         self.log(f"🚀 SÜREÇ BAŞLIYOR: {url}")
-        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=145)
+        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=144)
         hedef_link = None
 
         try:
             driver.get(url)
             ana_pencere_id = driver.current_window_handle
-            time.sleep(2)
+            time.sleep(1)
 
             # --- 404 KONTROLÜ ---
             if self.sayfa_404_mi(driver):
                 self.log("Link bulunamadı (404). İşlem iptal ediliyor.")
                 return "__NOT_FOUND__"
 
-            self.cloudflare_gec(driver)
+            # cloudflare_gec buton_bul_tikla içinde zaten çağrılıyor
             
             # --- SAYFA 1: REKLAM TETİKLEME ---
             if not self.buton_bul_tikla(driver):
@@ -199,9 +216,9 @@ class AyLinkBypassUltimate:
                 self.hata_analiz_kaydet(driver, "buton_bulunamadi_1")
                 return None
 
-            self.rastgele_bekle(0.5, 1.5)
+            self.rastgele_bekle(0.3, 1.0)
             self.reklam_kapat(driver, ana_pencere_id)
-            time.sleep(1)
+            time.sleep(0.5)
 
             # --- SAYFA 2: ARA SAYFAYA GEÇİŞ (RETRY LOOP) ---
             
@@ -212,7 +229,7 @@ class AyLinkBypassUltimate:
             for deneme in range(1, 4):
                 if self.buton_bul_tikla(driver):
                     self.log(f"✌️ Ara sayfaya geçiş tıklaması yapıldı (Deneme {deneme})...")
-                    time.sleep(2) # Yeni sayfanın/popup'ın açılması için süre
+                    time.sleep(1) # Yeni sayfanın/popup'ın açılması için süre
                     
                     # Buton var mı diye kontrol et
                     bulunan_buton = self.akilli_sekme_filtresi(driver)
@@ -231,7 +248,7 @@ class AyLinkBypassUltimate:
                             break # Ana pencere yoksa yapacak bir şey yok
                         
                         # Biraz bekle ve tekrar dene
-                        time.sleep(1)
+                        time.sleep(0.5)
                 else:
                     self.log("❌ Ara sayfa butonu (Go to Link) bulunamadı.")
                     break
@@ -255,7 +272,7 @@ class AyLinkBypassUltimate:
                         try: ActionChains(driver).move_to_element(hedef_btn).click().perform()
                         except: driver.execute_script("arguments[0].click();", hedef_btn)
                         
-                        time.sleep(1)
+                        time.sleep(0.5)
                         self.reklam_kapat(driver, ana_pencere_id)
                         
                         mevcut_url = driver.current_url
@@ -269,11 +286,11 @@ class AyLinkBypassUltimate:
                 # ------------------------------
                 
                 self.log("⏳ Son Yönlendirme bekleniyor...")
-                time.sleep(2)
+                time.sleep(1)
                 
                 if "bildirim" in driver.current_url:
-                    self.log("⚠️ Bildirim sayfasındayız, yönlendirme bekleniyor (5sn)...")
-                    time.sleep(5)
+                    self.log("⚠️ Bildirim sayfasındayız, yönlendirme bekleniyor (3sn)...")
+                    time.sleep(3)
                 
                 if len(driver.window_handles) > 1:
                     driver.switch_to.window(driver.window_handles[-1])
@@ -290,7 +307,8 @@ class AyLinkBypassUltimate:
             
         finally:
             self.log("🏁 Kapatılıyor...")
-            driver.quit()
+            try: driver.quit()
+            except: pass
             if self.display:
                 try: self.display.stop()
                 except: pass

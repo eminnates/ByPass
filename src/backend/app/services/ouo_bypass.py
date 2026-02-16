@@ -21,7 +21,7 @@ class OuoAutoBypass:
         if not self.debug_mode:
             _log.info("Sanal ekran (Xvfb) başlatılıyor...")
             try:
-                self.display = Display(visible=0, size=(1920, 1080))
+                self.display = Display(visible=0, size=(1280, 720))
                 self.display.start()
                 _log.info("Sanal monitör aktif.")
             except Exception as e:
@@ -31,14 +31,31 @@ class OuoAutoBypass:
 
         self.options = uc.ChromeOptions()
         
+        # --- TEMEL ---
         self.options.add_argument('--no-sandbox')
         self.options.add_argument('--disable-dev-shm-usage')
-        self.options.add_argument("--mute-audio")
         self.options.add_argument("--disable-popup-blocking")
-        self.options.add_argument("--start-maximized")
-        self.options.add_argument("--window-size=1920,1080") # Çözünürlük sabitlendi
+        self.options.add_argument("--window-size=1280,720")
         self.options.add_argument("--disable-blink-features=AutomationControlled")
         self.options.add_argument("--password-store=basic")
+        
+        # --- BELLEK TASARRUFU (VPS 2GB) ---
+        self.options.add_argument("--disable-gpu")
+        self.options.add_argument("--disable-software-rasterizer")
+        self.options.add_argument("--disable-extensions")
+        self.options.add_argument("--disable-translate")
+        self.options.add_argument("--disable-background-networking")
+        self.options.add_argument("--disable-sync")
+        self.options.add_argument("--disable-default-apps")
+        self.options.add_argument("--no-first-run")
+        self.options.add_argument("--mute-audio")
+        self.options.add_argument("--renderer-process-limit=1")
+        self.options.add_argument("--js-flags=--max-old-space-size=128")
+        self.options.add_argument("--disk-cache-size=1048576")  # 1MB cache
+        self.options.add_argument("--aggressive-cache-discard")
+        self.options.add_argument("--disable-features=TranslateUI,BlinkGenPropertyTrees")
+        self.options.add_argument("--blink-settings=imagesEnabled=false")  # Resimleri yükleme
+        
         self.options.page_load_strategy = 'eager' 
         
         _log.info("Tarayıcı konfigürasyonu tamam.")
@@ -119,7 +136,7 @@ class OuoAutoBypass:
                         driver.close()
                     except: pass
             
-            driver.set_page_load_timeout(30)
+            driver.set_page_load_timeout(20)
             
             if yeni_ana_pencere in driver.window_handles:
                 driver.switch_to.window(yeni_ana_pencere)
@@ -140,13 +157,13 @@ class OuoAutoBypass:
     def hedef_linki_bul(self, baslangic_url):
         self.log(f"🚀 SÜREÇ BAŞLATILIYOR: {baslangic_url}")
         
-        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=145)
+        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=144)
         bulunan_link = None
         
         try:
             driver.get(baslangic_url)
             self.log("Sayfaya gidildi.")
-            time.sleep(1)
+            time.sleep(0.5)
 
             # --- 404 KONTROLÜ (İLK AÇILIŞTA) ---
             if self.sayfa_404_mi(driver):
@@ -163,7 +180,6 @@ class OuoAutoBypass:
                     self.log("ZAMAN AŞIMI!")
                     self.hata_analiz_kaydet(driver, "zaman_asimi")
                     return "__TIMEOUT__"
-                    break
 
                 try:
                     current_url = driver.current_url
@@ -188,7 +204,7 @@ class OuoAutoBypass:
 
                 if "Method Not Allowed" in driver.page_source:
                     driver.refresh()
-                    time.sleep(1)
+                    time.sleep(0.5)
                     continue
 
                 # --- 2. GO SAYFASI ---
@@ -216,9 +232,9 @@ class OuoAutoBypass:
                         try: btn.click()
                         except: driver.execute_script("arguments[0].click();", btn)
                         
-                        time.sleep(1)
+                        time.sleep(0.5)
                         ana_pencere_id = self.guvenli_ve_hizli_temizlik(driver, ana_pencere_id)
-                        time.sleep(1)
+                        time.sleep(0.5)
                         continue 
 
                     except Exception as e:
@@ -261,15 +277,15 @@ class OuoAutoBypass:
                         actions.move_to_element(btn).click().perform()
                         
                         self.log("⏳ Popup bekleniyor...")
-                        time.sleep(1) 
+                        time.sleep(0.5) 
                         
                         ana_pencere_id = self.guvenli_ve_hizli_temizlik(driver, ana_pencere_id)
-                        time.sleep(1)
+                        time.sleep(0.5)
 
                     except Exception as e:
                         self.log(f"⚠️ Aşama 1 Hatası: {e}")
                         self.hata_analiz_kaydet(driver, "asama_1_hata") # EKLENDİ
-                        time.sleep(1)
+                        time.sleep(0.5)
 
         except Exception as e:
             self.log(f"❌ KRİTİK HATA: {e}")
