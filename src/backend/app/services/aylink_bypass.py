@@ -46,7 +46,7 @@ class AyLinkBypassUltimate:
         self.options.add_argument("--disable-popup-blocking")
         self.options.add_argument("--start-maximized")
         self.options.add_argument("--window-size=1920,1080")
-        self.options.page_load_strategy = 'normal'
+        self.options.page_load_strategy = 'eager'
 
     def log(self, mesaj):
         _log.info(mesaj)
@@ -83,11 +83,11 @@ class AyLinkBypassUltimate:
     def cloudflare_gec(self, driver):
         self.log("🛡️ Cloudflare kontrol ediliyor...")
         try:
-            container = WebDriverWait(driver, 5).until(
+            container = WebDriverWait(driver, 2).until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, ".cf-turnstile"))
             )
             driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", container)
-            time.sleep(1)
+            time.sleep(0.5)
             genislik = container.size['width']
             sol_kenar_offset = -(genislik / 2) + 25
             action = ActionChains(driver)
@@ -101,7 +101,7 @@ class AyLinkBypassUltimate:
                     time.sleep(0.1)
                     action.send_keys(Keys.SPACE).perform()
             self.log("⏳ Doğrulama bekleniyor...")
-            time.sleep(5)
+            time.sleep(2)
             return True
         except:
             self.log("✅ Cloudflare kutusu yok veya geçildi.")
@@ -160,12 +160,12 @@ class AyLinkBypassUltimate:
             (By.CSS_SELECTOR, ".btn-go"),
             (By.XPATH, "//a[contains(text(), 'Go to Link')]")
         ]
+        # CF kontrolü ONCE yap, her selektör içinde değil
+        self.cloudflare_gec(driver)
+        
         for tip, secici in seciciler:
             try:
-                # Butonu bulmadan önce CF kontrolü yap
-                self.cloudflare_gec(driver)
-                
-                btn = WebDriverWait(driver, 4).until(EC.element_to_be_clickable((tip, secici)))
+                btn = WebDriverWait(driver, 3).until(EC.element_to_be_clickable((tip, secici)))
                 self.log(f"✅ Buton bulundu ({secici}).")
                 try: ActionChains(driver).move_to_element(btn).click().perform()
                 except: driver.execute_script("arguments[0].click();", btn)
@@ -181,7 +181,7 @@ class AyLinkBypassUltimate:
         try:
             driver.get(url)
             ana_pencere_id = driver.current_window_handle
-            time.sleep(5)
+            time.sleep(2)
 
             # --- 404 KONTROLÜ ---
             if self.sayfa_404_mi(driver):
@@ -199,9 +199,9 @@ class AyLinkBypassUltimate:
                 self.hata_analiz_kaydet(driver, "buton_bulunamadi_1")
                 return None
 
-            self.rastgele_bekle(2, 3)
+            self.rastgele_bekle(0.5, 1.5)
             self.reklam_kapat(driver, ana_pencere_id)
-            time.sleep(2)
+            time.sleep(1)
 
             # --- SAYFA 2: ARA SAYFAYA GEÇİŞ (RETRY LOOP) ---
             
@@ -212,7 +212,7 @@ class AyLinkBypassUltimate:
             for deneme in range(1, 4):
                 if self.buton_bul_tikla(driver):
                     self.log(f"✌️ Ara sayfaya geçiş tıklaması yapıldı (Deneme {deneme})...")
-                    time.sleep(5) # Yeni sayfanın/popup'ın açılması için süre
+                    time.sleep(2) # Yeni sayfanın/popup'ın açılması için süre
                     
                     # Buton var mı diye kontrol et
                     bulunan_buton = self.akilli_sekme_filtresi(driver)
@@ -231,7 +231,7 @@ class AyLinkBypassUltimate:
                             break # Ana pencere yoksa yapacak bir şey yok
                         
                         # Biraz bekle ve tekrar dene
-                        time.sleep(2)
+                        time.sleep(1)
                 else:
                     self.log("❌ Ara sayfa butonu (Go to Link) bulunamadı.")
                     break
@@ -255,7 +255,7 @@ class AyLinkBypassUltimate:
                         try: ActionChains(driver).move_to_element(hedef_btn).click().perform()
                         except: driver.execute_script("arguments[0].click();", hedef_btn)
                         
-                        time.sleep(2)
+                        time.sleep(1)
                         self.reklam_kapat(driver, ana_pencere_id)
                         
                         mevcut_url = driver.current_url
@@ -269,11 +269,11 @@ class AyLinkBypassUltimate:
                 # ------------------------------
                 
                 self.log("⏳ Son Yönlendirme bekleniyor...")
-                time.sleep(5)
+                time.sleep(2)
                 
                 if "bildirim" in driver.current_url:
-                    self.log("⚠️ Bildirim sayfasındayız, yönlendirme bekleniyor (10sn)...")
-                    time.sleep(10)
+                    self.log("⚠️ Bildirim sayfasındayız, yönlendirme bekleniyor (5sn)...")
+                    time.sleep(5)
                 
                 if len(driver.window_handles) > 1:
                     driver.switch_to.window(driver.window_handles[-1])
