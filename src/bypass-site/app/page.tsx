@@ -651,8 +651,8 @@ export default function Home() {
       <div className="w-full max-w-5xl px-4 py-12 grid grid-cols-1 md:grid-cols-3 gap-6 z-20">
         {[
           { icon: <CheckCircle className="text-purple-400" />, title: t.features.site.title, desc: t.features.site.desc },
-          { icon: <Zap className="text-yellow-400" />, title: t.features.speed.title, desc: t.features.speed.desc },
-          { icon: <Shield className="text-fuchsia-400" />, title: t.features.secure.title, desc: t.features.secure.desc }
+          { icon: <Zap className="text-purple-400" />, title: t.features.speed.title, desc: t.features.speed.desc },
+          { icon: <Shield className="text-purple-400" />, title: t.features.secure.title, desc: t.features.secure.desc }
         ].map((f, i) => (
           <div key={i} className={`p-8 rounded-3xl border transition-all ${isDarkMode ? 'bg-[#121214] border-white/5 hover:border-purple-500/30' : 'bg-white border-gray-100 shadow-md hover:border-purple-300'}`}>
             <div className="mb-4">{f.icon}</div>
