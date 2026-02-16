@@ -13,11 +13,33 @@ import threading
 log = get_logger("api")
 
 ALLOWED_DOMAINS = [
+    # Selenium bypass (ağır)
     "ay.link",
     "ay.live",
     "ouo.io",
     "ouo.press",
-    "tl.tc"
+    # Basit redirect (hafif)
+    "bit.ly",
+    "bit.do",
+    "tinyurl.com",
+    "t.co",
+    "is.gd",
+    "v.gd",
+    "rb.gy",
+    "shorturl.at",
+    "shorturl.asia",
+    "cutt.ly",
+    "tl.tc",
+    "s.id",
+    "t.ly",
+    "tiny.cc",
+    "ow.ly",
+    "buff.ly",
+    "adf.ly",
+    "bc.vc",
+    "soo.gd",
+    "goo.gl",
+    "rebrand.ly",
 ]
 # Tabloları oluştur
 models.Base.metadata.create_all(bind=database.engine)
