@@ -1,5 +1,6 @@
 import requests
 import asyncio
+import threading
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models import BypassLink
@@ -10,6 +11,31 @@ from .ouo_bypass import OuoAutoBypass
 from .virustotal import scan_url_with_virustotal
 
 log = get_logger("engine")
+
+def _vt_scan_background(link_id: int, url: str):
+    """VT taramasını arka planda çalıştırır. Bypass'tan bağımsız."""
+    db: Session = SessionLocal()
+    try:
+        log.info(f"VT arka plan taraması başlıyor: ID={link_id} | {url}")
+        vt_status = asyncio.run(scan_url_with_virustotal(url))
+        
+        record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
+        if record:
+            record.safety_status = vt_status
+            record.last_scanned_at = datetime.now(timezone.utc)
+            db.commit()
+            log.info(f"VT sonucu kaydedildi: ID={link_id} | {vt_status}")
+    except Exception as e:
+        log.warning(f"VT arka plan hatası: ID={link_id} | {e}")
+        try:
+            record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
+            if record:
+                record.safety_status = "Error"
+                db.commit()
+        except:
+            pass
+    finally:
+        db.close()
 
 def run_bypass_process(link_id: int, url: str):
     db: Session = SessionLocal()
@@ -25,9 +51,8 @@ def run_bypass_process(link_id: int, url: str):
             bot = OuoAutoBypass()
             cozum = bot.hedef_linki_bul(url)
             
-        # --- 2. SONUÇ VE GÜVENLİK ---
+        # --- 2. SONUÇ ---
         if cozum and cozum.startswith("__"):
-            # Özel sinyal: __NOT_FOUND__, __TIMEOUT__ vb.
             record.status = "failed"
             if cozum == "__NOT_FOUND__":
                 record.fail_reason = "link_not_found"
@@ -41,27 +66,25 @@ def run_bypass_process(link_id: int, url: str):
         elif cozum:
             record.resolved_url = cozum
             record.status = "success"
-            
-            # --- VIRUSTOTAL CHECK ---
-            try:
-                log.info(f"VT Taraması başlıyor: {cozum}")
-                vt_status = asyncio.run(scan_url_with_virustotal(cozum))
-                
-                record.safety_status = vt_status
-                record.last_scanned_at = datetime.now(timezone.utc)
-                log.info(f"Güvenlik Sonucu: {vt_status}")
-                
-            except Exception as vt_err:
-                log.warning(f"VirusTotal hatası: {vt_err}")
-                record.safety_status = "Error"
+            record.safety_status = "scanning"  # Taranıyor olarak işaretle
         else:
             record.status = "failed"
             record.fail_reason = "unknown"
             log.warning(f"Bypass başarısız: ID={link_id} | URL={url}")
         
-        db.commit()
+        db.commit()  # Sonucu HEMEN kaydet — kullanıcı beklemez
         
-        # --- 3. WEBHOOK ---
+        # --- 3. VT TARAMASI (ARKA PLANDA) ---
+        if record.status == "success" and cozum:
+            vt_thread = threading.Thread(
+                target=_vt_scan_background,
+                args=(link_id, cozum),
+                daemon=True
+            )
+            vt_thread.start()
+            log.info(f"VT taraması arka plana alındı: ID={link_id}")
+        
+        # --- 4. WEBHOOK ---
         if record.webhook_url:
             try:
                 payload = {

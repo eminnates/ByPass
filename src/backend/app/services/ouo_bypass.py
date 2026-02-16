@@ -1,7 +1,7 @@
 import undetected_chromedriver as uc
 import time
 import datetime
-import os # Eklendi
+import os
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -146,7 +146,7 @@ class OuoAutoBypass:
         try:
             driver.get(baslangic_url)
             self.log("Sayfaya gidildi.")
-            time.sleep(3)
+            time.sleep(1)
 
             # --- 404 KONTROLÜ (İLK AÇILIŞTA) ---
             if self.sayfa_404_mi(driver):
@@ -188,7 +188,7 @@ class OuoAutoBypass:
 
                 if "Method Not Allowed" in driver.page_source:
                     driver.refresh()
-                    time.sleep(3)
+                    time.sleep(1)
                     continue
 
                 # --- 2. GO SAYFASI ---
@@ -216,9 +216,9 @@ class OuoAutoBypass:
                         try: btn.click()
                         except: driver.execute_script("arguments[0].click();", btn)
                         
-                        time.sleep(2)
+                        time.sleep(1)
                         ana_pencere_id = self.guvenli_ve_hizli_temizlik(driver, ana_pencere_id)
-                        time.sleep(2)
+                        time.sleep(1)
                         continue 
 
                     except Exception as e:
@@ -226,7 +226,7 @@ class OuoAutoBypass:
                         self.hata_analiz_kaydet(driver, "go_sayfasi_hata") # EKLENDİ
                         try: driver.execute_script("document.getElementById('form-go').submit();")
                         except: pass
-                        time.sleep(2)
+                        time.sleep(1)
 
                 # --- 3. İLK SAYFA ---
                 else:
@@ -238,7 +238,7 @@ class OuoAutoBypass:
                             if cf_iframe:
                                 self.log("⚠️ CF Turnstile algılandı.")
                                 self.insan_taklidi_yap(driver)
-                                time.sleep(2)
+                                time.sleep(1)
                         except: pass
 
                         btn = WebDriverWait(driver, 10).until(
@@ -261,19 +261,19 @@ class OuoAutoBypass:
                         actions.move_to_element(btn).click().perform()
                         
                         self.log("⏳ Popup bekleniyor...")
-                        time.sleep(2) 
+                        time.sleep(1) 
                         
                         ana_pencere_id = self.guvenli_ve_hizli_temizlik(driver, ana_pencere_id)
-                        time.sleep(2)
+                        time.sleep(1)
 
                     except Exception as e:
                         self.log(f"⚠️ Aşama 1 Hatası: {e}")
                         self.hata_analiz_kaydet(driver, "asama_1_hata") # EKLENDİ
-                        time.sleep(2)
+                        time.sleep(1)
 
         except Exception as e:
             self.log(f"❌ KRİTİK HATA: {e}")
-            self.hata_analiz_kaydet(driver, "kritik_cokme") # GÜNCELLENDİ
+            self.hata_analiz_kaydet(driver, "kritik_cokme")
         finally:
             self.log("🏁 Tarayıcı kapatılıyor.")
             try: driver.quit()
