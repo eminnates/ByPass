@@ -56,10 +56,10 @@ app.add_middleware(
 
 # --- KUYRUK SİSTEMİ (DUAL LANE) ---
 # Selenium domainleri (ağır, 30s+)
-SELENIUM_DOMAINS = {"ay.link", "ay.live", "ouo.io", "ouo.press"}
+SELENIUM_DOMAINS = {"ay.link", "ay.live"}
 
-# Fast lane: Redirect bypass'lar (hafif, <1sn)
-fast_executor = ThreadPoolExecutor(max_workers=5)
+# Fast lane: Redirect ve curl_cffi bypass'lar (hafif, <10sn)
+fast_executor = ThreadPoolExecutor(max_workers=20)
 # Heavy lane: Selenium bypass'lar (ağır, Chrome gerektirir)
 heavy_executor = ThreadPoolExecutor(max_workers=3)
 

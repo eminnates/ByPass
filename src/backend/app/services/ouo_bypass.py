@@ -1,314 +1,166 @@
-import undetected_chromedriver as uc
+import re
 import time
-import datetime
-import os
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
-from pyvirtualdisplay import Display
+import urllib.request
+import urllib.parse
+from curl_cffi import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urlparse
 from app.logger import get_logger
 
 _log = get_logger("ouo")
 
+OUO_DOMAINS = {"ouo.io", "ouo.press"}
+
 class OuoAutoBypass:
-    def __init__(self, debug_mode=False): # Debug modu eklendi
+    def __init__(self, debug_mode=False):
         self.debug_mode = debug_mode
-        self.display = None
+        # curl_cffi session configuration
+        self.client = requests.Session()
+        self.client.headers.update({
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
+            'cache-control': 'max-age=0',
+            'referer': 'http://www.google.com/ig/adde?moduleurl=',
+            'upgrade-insecure-requests': '1',
+        })
+        _log.info(f"OuoAutoBypass (curl_cffi) hazır. Debug: {debug_mode}")
 
-        _log.info(f"Başlatılıyor... (Debug Modu: {'AÇIK' if debug_mode else 'KAPALI'})")
-
-        if not self.debug_mode:
-            _log.info("Sanal ekran (Xvfb) başlatılıyor...")
-            try:
-                self.display = Display(visible=0, size=(1280, 720))
-                self.display.start()
-                _log.info("Sanal monitör aktif.")
-            except Exception as e:
-                _log.warning(f"Ekran hatası: {e}")
-        else:
-            _log.info("Debug modu açık: Tarayıcı gerçek ekranda açılacak.")
-
-        self.options = uc.ChromeOptions()
-        
-        # --- TEMEL ---
-        self.options.add_argument('--no-sandbox')
-        self.options.add_argument('--disable-dev-shm-usage')
-        self.options.add_argument("--disable-popup-blocking")
-        self.options.add_argument("--window-size=1280,720")
-        self.options.add_argument("--disable-blink-features=AutomationControlled")
-        self.options.add_argument("--password-store=basic")
-        
-        # --- BELLEK TASARRUFU (VPS 2GB) ---
-        self.options.add_argument("--disable-gpu")
-        self.options.add_argument("--disable-software-rasterizer")
-        self.options.add_argument("--disable-extensions")
-        self.options.add_argument("--disable-translate")
-        self.options.add_argument("--disable-background-networking")
-        self.options.add_argument("--disable-sync")
-        self.options.add_argument("--disable-default-apps")
-        self.options.add_argument("--no-first-run")
-        self.options.add_argument("--mute-audio")
-        self.options.add_argument("--renderer-process-limit=1")
-        self.options.add_argument("--js-flags=--max-old-space-size=128")
-        self.options.add_argument("--disk-cache-size=1048576")  # 1MB cache
-        self.options.add_argument("--aggressive-cache-discard")
-        self.options.add_argument("--disable-features=TranslateUI,BlinkGenPropertyTrees")
-        self.options.add_argument("--blink-settings=imagesEnabled=false")  # Resimleri yükleme
-        
-        self.options.page_load_strategy = 'eager' 
-        
-        _log.info("Tarayıcı konfigürasyonu tamam.")
-
-    def log(self, mesaj):
-        _log.info(mesaj)
-
-    # --- YENİ EKLENEN FONKSİYON ---
-    def hata_analiz_kaydet(self, driver, hata_tipi="genel"):
-        """Hata anında ekran görüntüsü ve HTML kaynağını kaydeder."""
+    def _recaptcha_v3(self):
+        """Google ReCAPTCHA v3 token'ı programatik olarak çözer."""
         try:
-            klasor = "hata_logs"
-            if not os.path.exists(klasor): os.makedirs(klasor)
-            zaman = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            dosya_adi = f"{klasor}/OUO_{hata_tipi}_{zaman}" # OUO öneki eklendi
-            
-            # 1. Ekran Görüntüsü
-            driver.save_screenshot(f"{dosya_adi}.png")
-            
-            # 2. HTML Kaynağı
-            with open(f"{dosya_adi}.html", "w", encoding="utf-8") as f:
-                f.write(driver.page_source)
-                
-            self.log(f"📸 Hata Analizi Kaydedildi: {dosya_adi}")
+            ANCHOR_URL = 'https://www.google.com/recaptcha/api2/anchor?ar=1&k=6Lcr1ncUAAAAAH3cghg6cOTPGARa8adOf-y9zv2x&co=aHR0cHM6Ly9vdW8ucHJlc3M6NDQz&hl=en&v=pCoGBhjs9s8EhFOHJFe8cqis&size=invisible&cb=ahgyd1gkfkhe'
+            url_base = 'https://www.google.com/recaptcha/'
+            post_data = "v={}&reason=q&c={}&k={}&co={}"
+
+            matches = re.findall(r'([api2|enterprise]+)/anchor\?(.*)', ANCHOR_URL)[0]
+            url_base += matches[0] + '/'
+            params_str = matches[1]
+
+            anchor_url = url_base + 'anchor?' + params_str
+            req = urllib.request.Request(anchor_url)
+            with urllib.request.urlopen(req) as resp:
+                anchor_html = resp.read().decode()
+
+            token = re.findall(r'"recaptcha-token" value="(.*?)"', anchor_html)[0]
+            params = dict(pair.split('=') for pair in params_str.split('&'))
+            post_data = post_data.format(params["v"], token, params["k"], params["co"])
+
+            reload_url = url_base + 'reload?k=' + params["k"]
+            req = urllib.request.Request(reload_url, data=post_data.encode(),
+                                        headers={'content-type': 'application/x-www-form-urlencoded'})
+            with urllib.request.urlopen(req) as resp:
+                reload_html = resp.read().decode()
+
+            answer = re.findall(r'"rresp","(.*?)"', reload_html)[0]
+            return answer
         except Exception as e:
-            self.log(f"⚠️ Hata analizi kaydedilemedi: {e}")
-    # ------------------------------
+            _log.error(f"ReCAPTCHA çözme hatası: {e}")
+            raise e
 
-    def sayfa_404_mi(self, driver):
-        """Sayfada ouo.io/js/404.js varsa link geçersizdir."""
+    def _is_ouo(self, url):
+        """URL'nin ouo domain'i olup olmadığını kontrol eder."""
         try:
-            kaynak = driver.page_source
-            if "ouo.io/js/404.js" in kaynak or "LINK NOT FOUND" in kaynak:
-                return True
-        except Exception:
-            pass
-        return False
-
-    def insan_taklidi_yap(self, driver):
-        try:
-            body = driver.find_element(By.TAG_NAME, 'body')
-            action = ActionChains(driver)
-            action.move_to_element(body).move_by_offset(10, 20).perform()
+            domain = urlparse(url).netloc.lower().replace("www.", "")
+            return domain in OUO_DOMAINS
         except:
-            pass
+            return False
 
-    def guvenli_ve_hizli_temizlik(self, driver, ana_pencere_id):
-        try:
-            tum_pencereler = driver.window_handles
-            if len(tum_pencereler) <= 1:
-                return driver.current_window_handle
+    def _bypass_single(self, url):
+        """Tek bir ouo linkini bypass eder."""
+        # ouo.press kullan (Cloudflare daha yumuşak)
+        work_url = url.replace("ouo.io", "ouo.press")
+        p = urlparse(work_url)
+        id_val = work_url.split('/')[-1]
+        next_url = f"{p.scheme}://{p.hostname}/go/{id_val}"
 
-            self.log(f"🧹 Temizlik: {len(tum_pencereler)} pencere kontrol ediliyor...")
-            driver.set_page_load_timeout(5)
-            yeni_ana_pencere = ana_pencere_id
-            to_close = [] 
+        _log.info(f"İstek atılıyor: {work_url}")
+        res = self.client.get(work_url, impersonate="chrome124", timeout=30)
 
-            for handle in tum_pencereler:
-                if handle == ana_pencere_id: continue 
-
-                try:
-                    driver.switch_to.window(handle)
-                    mevcut_url = driver.current_url
-                    
-                    if "ouo" in mevcut_url:
-                        yeni_ana_pencere = handle 
-                    elif "google.com/recaptcha" in mevcut_url:
-                         pass # Koru
-                    else:
-                        to_close.append(handle)
-                except:
-                    to_close.append(handle)
-
-            for handle in to_close:
-                if handle != yeni_ana_pencere:
-                    try:
-                        driver.switch_to.window(handle)
-                        driver.close()
-                    except: pass
+        # 404 Kontrolü
+        if res.status_code == 404 or "ouo.io/js/404.js" in res.text or "LINK NOT FOUND" in res.text:
+            return "__NOT_FOUND__"
             
-            driver.set_page_load_timeout(20)
-            
-            if yeni_ana_pencere in driver.window_handles:
-                driver.switch_to.window(yeni_ana_pencere)
-                return yeni_ana_pencere
-            else:
-                driver.switch_to.window(driver.window_handles[0])
-                return driver.window_handles[0]
+        if res.status_code != 200:
+            _log.warning(f"HTTP {res.status_code} alındı.")
+            return None
 
-        except Exception as e:
-            self.log(f"⚠️ Temizlik hatası: {e}")
+        has_form = '<form' in res.text.lower()
+        if not has_form:
+            _log.warning("Form bulunamadı (Cloudflare engeli olabilir).")
+            # Hata analizi için HTML'i loglayabiliriz ama şimdilik gerek yok
+            return None
+
+        current_res = res
+        for step in range(2):
+            if current_res.headers.get('Location'):
+                return current_res.headers.get('Location')
+
+            soup = BeautifulSoup(current_res.content, 'lxml')
+            form = soup.find('form')
+            if not form:
+                _log.warning(f"Adım {step+1}: Form yok.")
+                return None
+
+            inputs = form.find_all("input", {"name": re.compile(r"token$")})
+            data = {inp.get('name'): inp.get('value') for inp in inputs}
+            
             try:
-                if len(driver.window_handles) > 0:
-                    driver.switch_to.window(driver.window_handles[0])
-                    return driver.window_handles[0]
-            except: pass
-            return ana_pencere_id
+                data['x-token'] = self._recaptcha_v3()
+            except Exception:
+                return None
 
-    def hedef_linki_bul(self, baslangic_url):
-        self.log(f"🚀 SÜREÇ BAŞLATILIYOR: {baslangic_url}")
-        
-        driver = uc.Chrome(options=self.options, use_subprocess=True, version_main=144)
-        bulunan_link = None
-        
-        try:
-            driver.get(baslangic_url)
-            self.log("Sayfaya gidildi.")
-            time.sleep(0.5)
+            h = {'content-type': 'application/x-www-form-urlencoded'}
+            current_res = self.client.post(next_url, data=data, headers=h,
+                                         allow_redirects=False, impersonate="chrome124", timeout=30)
+            
+            # Sonraki adım URL'si
+            next_url = f"{p.scheme}://{p.hostname}/xreallcygo/{id_val}"
 
-            # --- 404 KONTROLÜ (İLK AÇILIŞTA) ---
-            if self.sayfa_404_mi(driver):
-                self.log("Link bulunamadı (404). İşlem iptal ediliyor.")
+        return current_res.headers.get('Location')
+
+    def hedef_linki_bul(self, url):
+        """Zincirleme bypass mantığı ile hedef linki bulur."""
+        _log.info(f"🚀 SÜREÇ BAŞLATILIYOR (curl_cffi): {url}")
+        
+        current_url = url
+        chain = [url]
+        max_depth = 10
+        start_time = time.time()
+
+        for depth in range(1, max_depth + 1):
+            _log.info(f"🔗 [{depth}] Bypass deneniyor: {current_url}")
+            
+            try:
+                result = self._bypass_single(current_url)
+            except Exception as e:
+                _log.error(f"Bypass sırasında hata: {e}")
+                return None
+
+            if result == "__NOT_FOUND__":
+                _log.warning("Link bulunamadı (404).")
                 return "__NOT_FOUND__"
+                
+            if not result:
+                _log.warning("Bypass başarısız, sonuç dönmedi.")
+                return None
 
-            start_time = time.time()
-            max_sure = 120 
+            chain.append(result)
+            _log.info(f"✅ Adım sonucu: {result}")
 
-            ana_pencere_id = driver.current_window_handle
+            if self._is_ouo(result):
+                _log.info("🔄 Sonuç yine ouo! Tekrar bypass ediliyor...")
+                current_url = result
+            else:
+                total_time = time.time() - start_time
+                _log.info(f"🎯 FİNAL ULAŞILDI: {result} ({total_time:.2f}s)")
+                return result
 
-            while True:
-                if time.time() - start_time > max_sure:
-                    self.log("ZAMAN AŞIMI!")
-                    self.hata_analiz_kaydet(driver, "zaman_asimi")
-                    return "__TIMEOUT__"
-
-                try:
-                    current_url = driver.current_url
-                except Exception as e:
-                    if "invalid session" in str(e).lower():
-                        self.log("❌ Oturum kapandı.")
-                        break
-                    time.sleep(1)
-                    continue
-
-                # --- 0. 404 KONTROLÜ (DÖNGÜ İÇİ) ---
-                if self.sayfa_404_mi(driver):
-                    self.log("Link bulunamadı (404). İşlem iptal ediliyor.")
-                    self.hata_analiz_kaydet(driver, "404_not_found")
-                    return "__NOT_FOUND__"
-
-                # --- 1. HEDEF KONTROLÜ ---
-                if "ouo" not in current_url and "about:blank" not in current_url and "google.com" not in current_url:
-                    bulunan_link = current_url
-                    self.log(f"HEDEF BULUNDU: {current_url}")
-                    break
-
-                if "Method Not Allowed" in driver.page_source:
-                    driver.refresh()
-                    time.sleep(0.5)
-                    continue
-
-                # --- 2. GO SAYFASI ---
-                if "/go/" in current_url:
-                    self.log("📍 Durum: '/go/' sayfasındayız.")
-                    try:
-                        try:
-                            timer_element = driver.find_element(By.ID, "timer")
-                            loop_count = 0
-                            while timer_element.text != "0":
-                                loop_count += 1
-                                if loop_count > 10: break
-                                self.log(f"      ...Bekleniyor: {timer_element.text}")
-                                self.insan_taklidi_yap(driver)
-                                time.sleep(1)
-                        except:
-                            self.log("⚠️ Timer yok veya 0.")
-
-                        self.log("🖱️ Buton aranıyor...")
-                        btn = WebDriverWait(driver, 10).until(
-                             EC.element_to_be_clickable((By.ID, "btn-main"))
-                        )
-                        
-                        self.log("🖱️ Butona tıklandı!")
-                        try: btn.click()
-                        except: driver.execute_script("arguments[0].click();", btn)
-                        
-                        time.sleep(0.5)
-                        ana_pencere_id = self.guvenli_ve_hizli_temizlik(driver, ana_pencere_id)
-                        time.sleep(0.5)
-                        continue 
-
-                    except Exception as e:
-                        self.log(f"❌ Go Sayfası Hatası: {e}")
-                        self.hata_analiz_kaydet(driver, "go_sayfasi_hata") # EKLENDİ
-                        try: driver.execute_script("document.getElementById('form-go').submit();")
-                        except: pass
-                        time.sleep(1)
-
-                # --- 3. İLK SAYFA ---
-                else:
-                    try:
-                        self.log("📍 Durum: Aşama 1 (Ben robot değilim).")
-                        
-                        try:
-                            cf_iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@src, 'https://challenges.cloudflare.com')]")
-                            if cf_iframe:
-                                self.log("⚠️ CF Turnstile algılandı.")
-                                self.insan_taklidi_yap(driver)
-                                time.sleep(1)
-                        except: pass
-
-                        btn = WebDriverWait(driver, 10).until(
-                            EC.presence_of_element_located((By.ID, "btn-main"))
-                        )
-                        self.log("✅ Buton bulundu.")
-
-                        # Reklam iframelerini sil
-                        driver.execute_script("""
-                            var iframes = document.querySelectorAll('iframe');
-                            iframes.forEach(function(iframe) {
-                                if (iframe.id.includes('container') || window.getComputedStyle(iframe).zIndex > 1000) {
-                                    iframe.remove();
-                                }
-                            });
-                        """)
-                        
-                        self.log("🖱️ Tıklanıyor...")
-                        actions = ActionChains(driver)
-                        actions.move_to_element(btn).click().perform()
-                        
-                        self.log("⏳ Popup bekleniyor...")
-                        time.sleep(0.5) 
-                        
-                        ana_pencere_id = self.guvenli_ve_hizli_temizlik(driver, ana_pencere_id)
-                        time.sleep(0.5)
-
-                    except Exception as e:
-                        self.log(f"⚠️ Aşama 1 Hatası: {e}")
-                        self.hata_analiz_kaydet(driver, "asama_1_hata") # EKLENDİ
-                        time.sleep(0.5)
-
-        except Exception as e:
-            self.log(f"❌ KRİTİK HATA: {e}")
-            self.hata_analiz_kaydet(driver, "kritik_cokme")
-        finally:
-            self.log("🏁 Tarayıcı kapatılıyor.")
-            try: driver.quit()
-            except: pass
-            
-            try:
-                if self.display:
-                    self.display.stop()
-                    self.log("🛑 Sanal ekran kapatıldı.")
-            except: pass
-            
-        return bulunan_link
+        _log.warning("⚠️ Max derinliğe ulaşıldı.")
+        return chain[-1]
 
 if __name__ == "__main__":
-    # Test için debug modunu açabilirsin (True)
+    # Test
     bot = OuoAutoBypass(debug_mode=True)
     link = "https://ouo.io/94jkLO" 
     sonuc = bot.hedef_linki_bul(link)
-    
-    print("\n" + "="*40)
-    print(f"🎯 SONUÇ: {sonuc}")
-    print("="*40 + "\n")
+    print(f"Sonuç: {sonuc}")
