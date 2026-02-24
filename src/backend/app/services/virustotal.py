@@ -70,7 +70,7 @@ def parse_vt_stats(stats):
     return "Clean"
 
 def scan_url_with_virustotal_sync(url: str) -> str:
-    """Senkron VT taraması — thread içinde asyncio.run() yerine kullanılır."""
+    """Senkron VT taraması — thread içinde çalışır. Hızlı sonuç öncelikli."""
     if not VIRUSTOTAL_API_KEY:
         log.warning("VT_API_KEY bulunamadı!")
         return "Unknown"
@@ -84,16 +84,18 @@ def scan_url_with_virustotal_sync(url: str) -> str:
         return "Error"
 
     try:
-        with httpx.Client(timeout=15) as client:
-            # 1. RAPOR KONTROLÜ
+        with httpx.Client(timeout=10) as client:
+            # 1. RAPOR KONTROLÜ (çoğu URL zaten VT'de var, hızlı dönüş)
             lookup_resp = client.get(f"{BASE_URL}/urls/{url_id}", headers=headers)
             
             if lookup_resp.status_code == 200:
                 stats = lookup_resp.json()["data"]["attributes"]["last_analysis_stats"]
-                return parse_vt_stats(stats)
+                sonuc = parse_vt_stats(stats)
+                log.info(f"VT rapor bulundu (cache): {sonuc}")
+                return sonuc
             
-            # 2. YENİ TARAMA
-            log.info(f"VT Raporu yok, tarama başlatılıyor: {url}")
+            # 2. YENİ TARAMA (sadece rapor yoksa)
+            log.info(f"VT raporu yok, yeni tarama: {url}")
             scan_resp = client.post(f"{BASE_URL}/urls", data={"url": url}, headers=headers)
             
             if scan_resp.status_code != 200:
@@ -103,17 +105,24 @@ def scan_url_with_virustotal_sync(url: str) -> str:
             analysis_id = scan_resp.json()["data"]["id"]
             analysis_url = f"{BASE_URL}/analyses/{analysis_id}"
             
-            # 3. SONUCU BEKLEME
-            for _ in range(8):
-                time.sleep(1.5)
+            # 3. ARKA PLANDA BEKLEME (max 60s — thread'de çalışıyor, kullanıcıyı bloklamaz)
+            for i in range(30):
+                time.sleep(2)
                 result = client.get(analysis_url, headers=headers)
                 
                 if result.status_code == 200:
                     data = result.json()["data"]["attributes"]
-                    if data.get("status") == "completed":
-                        return parse_vt_stats(data.get("stats"))
+                    status = data.get("status")
+                    if status == "completed":
+                        sonuc = parse_vt_stats(data.get("stats"))
+                        log.info(f"VT tarama tamamlandı: {sonuc} ({(i+1)*2}s)")
+                        return sonuc
+                    elif status == "queued":
+                        if i % 5 == 0:  # Her 10 saniyede bir logla
+                            log.info(f"VT tarama kuyrukta... ({(i+1)*2}s/60s)")
             
-            return "Timeout"
+            log.warning("VT tarama 60s sonra tamamlanamadı.")
+            return "Unknown"
             
     except Exception as e:
         log.error(f"VT Kritik Hata: {e}", exc_info=True)

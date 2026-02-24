@@ -7,3 +7,4 @@ logs/
 benchmark_results/
 test_ouo_bypass.py
 test_integration.py
+test_scrapling.py
