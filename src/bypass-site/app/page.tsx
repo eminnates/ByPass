@@ -613,58 +613,83 @@ export default function Home() {
 
           {/* BAŞARILI SONUÇ KARTI */}
           {resultLink && (
-            <div className={`p-6 rounded-2xl border animate-in zoom-in-95 duration-300 flex flex-col gap-4
-              ${isDarkMode ? 'bg-purple-900/10 border-purple-500/30' : 'bg-purple-50 border-purple-200'}`}>
+            <div className="space-y-3 animate-in zoom-in-95 duration-300">
+              <div className={`p-6 rounded-2xl border flex flex-col gap-4
+                ${isDarkMode ? 'bg-purple-900/10 border-purple-500/30' : 'bg-purple-50 border-purple-200'}`}>
 
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-purple-500 flex items-center gap-2">
-                  <CheckCircle size={20} /> {t.hero.success}
-                </span>
-                <div className="flex items-center gap-2">
-                  {safetyStatus === 'scanning' && (
-                    <span className="text-xs text-yellow-400 flex items-center gap-1 animate-pulse">
-                      <Shield size={14} /> Güvenlik taranıyor...
-                    </span>
-                  )}
-                  {safetyStatus === 'Clean' && (
-                    <span className="text-xs text-green-400 flex items-center gap-1">
-                      <Shield size={14} /> Güvenli ✓
-                    </span>
-                  )}
-                  {safetyStatus === 'Malicious' && (
-                    <span className="text-xs text-red-400 flex items-center gap-1 font-bold">
-                      <Shield size={14} /> ⚠️ Tehlikeli!
-                    </span>
-                  )}
-                  {safetyStatus === 'Suspicious' && (
-                    <span className="text-xs text-orange-400 flex items-center gap-1">
-                      <Shield size={14} /> Şüpheli
-                    </span>
-                  )}
-                  {safetyStatus === 'Error' && (
-                    <span className="text-xs text-gray-400 flex items-center gap-1">
-                      <Shield size={14} /> Taranamadı
-                    </span>
-                  )}
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-purple-500 flex items-center gap-2">
+                    <CheckCircle size={20} /> {t.hero.success}
+                  </span>
                   {autoRedirect && <span className="text-xs text-gray-400 animate-pulse">Otomatik yönlendiriliyor...</span>}
                 </div>
+
+                <div className={`flex items-center gap-2 p-3 rounded-lg ${isDarkMode ? 'bg-black/40' : 'bg-white border'}`}>
+                  <input
+                    readOnly
+                    value={resultLink}
+                    className="bg-transparent w-full outline-none text-sm text-gray-500"
+                  />
+                  <a
+                    href={resultLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-2"
+                  >
+                    {t.hero.go} <Globe size={16} />
+                  </a>
+                </div>
+
+                {/* Güvenlik Rozeti — Linkin hemen altında */}
+                {safetyStatus && (
+                  <div className="flex items-center justify-center">
+                    {safetyStatus === 'scanning' && (
+                      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium animate-pulse ${isDarkMode ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' : 'bg-yellow-50 text-yellow-600 border border-yellow-200'}`}>
+                        <Shield size={16} /> Güvenlik taranıyor...
+                      </span>
+                    )}
+                    {safetyStatus === 'Clean' && (
+                      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${isDarkMode ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-green-50 text-green-600 border border-green-200'}`}>
+                        <Shield size={16} /> ✓ Güvenli Link
+                      </span>
+                    )}
+                    {safetyStatus === 'Error' && (
+                      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${isDarkMode ? 'bg-gray-500/10 text-gray-400 border border-gray-500/20' : 'bg-gray-50 text-gray-500 border border-gray-200'}`}>
+                        <Shield size={16} /> Tarama yapılamadı
+                      </span>
+                    )}
+                    {safetyStatus === 'Timeout' && (
+                      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ${isDarkMode ? 'bg-gray-500/10 text-gray-400 border border-gray-500/20' : 'bg-gray-50 text-gray-500 border border-gray-200'}`}>
+                        <Shield size={16} /> Tarama zaman aşımı
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
-              <div className={`flex items-center gap-2 p-3 rounded-lg ${isDarkMode ? 'bg-black/40' : 'bg-white border'}`}>
-                <input
-                  readOnly
-                  value={resultLink}
-                  className="bg-transparent w-full outline-none text-sm text-gray-500"
-                />
-                <a
-                  href={resultLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg font-medium transition-colors whitespace-nowrap flex items-center gap-2"
-                >
-                  {t.hero.go} <Globe size={16} />
-                </a>
-              </div>
+              {/* TEHLİKELİ LİNK UYARISI — Kartın dışında, tam genişlik */}
+              {safetyStatus === 'Malicious' && (
+                <div className="p-4 rounded-2xl border-2 border-red-500/50 bg-red-500/10 flex items-center gap-3 animate-in fade-in duration-500">
+                  <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                    <Shield size={22} className="text-red-500" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-red-500 text-sm">⚠️ TEHLİKELİ LİNK TESPİT EDİLDİ!</p>
+                    <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-red-400/70' : 'text-red-600/70'}`}>VirusTotal bu linkin zararlı olduğunu bildirdi. Dikkatli olun!</p>
+                  </div>
+                </div>
+              )}
+              {safetyStatus === 'Suspicious' && (
+                <div className="p-4 rounded-2xl border-2 border-orange-500/50 bg-orange-500/10 flex items-center gap-3 animate-in fade-in duration-500">
+                  <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center flex-shrink-0">
+                    <Shield size={22} className="text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-orange-500 text-sm">⚠️ ŞÜPHELİ LİNK</p>
+                    <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-orange-400/70' : 'text-orange-600/70'}`}>Bu link bazı güvenlik tarayıcıları tarafından şüpheli bulundu.</p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
