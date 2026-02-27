@@ -1,46 +1,23 @@
+"""
+ByPass API — FastAPI Endpoints
+
+Tüm HTTP endpoint'leri burada tanımlı.
+Kuyruk yönetimi queue_manager modülünde merkezileştirilmiştir.
+"""
+
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
 from urllib.parse import urlparse
-from . import models, database
-from .logger import get_logger
-from .services.engine_wrapper import run_fast_bypass, run_heavy_token_fetch
 from typing import Optional
-from concurrent.futures import ThreadPoolExecutor
-import threading
+
+from . import models, database
+from .constants import LinkStatus, ALLOWED_DOMAINS, is_heavy
+from .logger import get_logger
+from .queue_manager import submit_to_queue, get_queue_position, get_queue_info, get_heavy_queue_length, shutdown as shutdown_executors
 
 log = get_logger("api")
-
-ALLOWED_DOMAINS = [
-    # Heavy — Browser gerektiren (AyLink: Scrapling ile token alma)
-    "ay.link",
-    "ay.live",
-    # Fast — HTTP only (OUO: curl_cffi, Redirect: requests)
-    "ouo.io",
-    "ouo.press",
-    "bit.ly",
-    "bit.do",
-    "tinyurl.com",
-    "t.co",
-    "is.gd",
-    "v.gd",
-    "rb.gy",
-    "shorturl.at",
-    "shorturl.asia",
-    "cutt.ly",
-    "tl.tc",
-    "s.id",
-    "t.ly",
-    "tiny.cc",
-    "ow.ly",
-    "buff.ly",
-    "adf.ly",
-    "bc.vc",
-    "soo.gd",
-    "goo.gl",
-    "rebrand.ly",
-]
 
 # Tabloları oluştur
 models.Base.metadata.create_all(bind=database.engine)
@@ -55,115 +32,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================================================================
-# KUYRUK SİSTEMİ — HEAVY / FAST DUAL LANE
-# =========================================================================
-# Heavy: Browser gerektiren işlemler (AyLink token alma)
-HEAVY_DOMAINS = {"ay.link", "ay.live"}
 
-# Heavy lane: max 3 browser aynı anda (RAM koruma)
-heavy_executor = ThreadPoolExecutor(max_workers=3)
-# Fast lane: HTTP-only, sınırsız (OUO, redirect, AyLink API)
-fast_executor = ThreadPoolExecutor(max_workers=50)
-
-# Thread-safe kuyruk takibi
-_queue_lock = threading.Lock()
-_heavy_queue: list[int] = []       # Browser kuyruğunda bekleyenler
-_heavy_active: set[int] = set()    # Browser aktif işlemler
-_fast_active: set[int] = set()     # HTTP aktif işlemler
-
-
-def _is_heavy(url: str) -> bool:
-    """URL'nin browser gerektiren bir domain olup olmadığını kontrol eder."""
-    domain = urlparse(url).netloc.lower().replace("www.", "")
-    return domain in HEAVY_DOMAINS
-
-
-def _dispatch_to_fast(link_id: int, url: str, tokens: dict = None):
-    """
-    Fast lane'e iş gönderir. 
-    Heavy tamamlandığında AyLink token'larını buraya yönlendirir.
-    """
-    with _queue_lock:
-        _fast_active.add(link_id)
-
-    log.info(f"[FAST] İşlem başladı: ID={link_id}")
-
-    try:
-        run_fast_bypass(link_id, url, aylink_tokens=tokens)
-    finally:
-        with _queue_lock:
-            _fast_active.discard(link_id)
-        log.info(f"[FAST] İşlem bitti: ID={link_id}")
-
-
-def _tracked_heavy_process(link_id: int, url: str):
-    """
-    Heavy lane: Browser ile token al, sonra fast lane'e API bypass gönder.
-    """
-    with _queue_lock:
-        if link_id in _heavy_queue:
-            _heavy_queue.remove(link_id)
-        _heavy_active.add(link_id)
-
-    log.info(f"[HEAVY] İşlem başladı: ID={link_id} | Aktif: {len(_heavy_active)} | Kuyrukta: {len(_heavy_queue)}")
-
-    try:
-        # Heavy: token al → Fast: API bypass (callback ile fast lane'e gönder)
-        run_heavy_token_fetch(
-            link_id, url,
-            fast_callback=lambda lid, u, tokens: fast_executor.submit(_dispatch_to_fast, lid, u, tokens)
-        )
-    finally:
-        with _queue_lock:
-            _heavy_active.discard(link_id)
-        log.info(f"[HEAVY] İşlem bitti: ID={link_id} | Aktif: {len(_heavy_active)} | Kuyrukta: {len(_heavy_queue)}")
-
-
-def _tracked_fast_process(link_id: int, url: str):
-    """
-    Fast lane: HTTP-only bypass (OUO, redirect).  
-    Yüksek öncelik, kuyruk yok, anında işlenir.
-    """
-    with _queue_lock:
-        _fast_active.add(link_id)
-
-    log.info(f"[FAST] İşlem başladı: ID={link_id}")
-
-    try:
-        run_fast_bypass(link_id, url)
-    finally:
-        with _queue_lock:
-            _fast_active.discard(link_id)
-        log.info(f"[FAST] İşlem bitti: ID={link_id}")
-
-
-def submit_to_queue(link_id: int, url: str):
-    """Domain'e göre heavy veya fast lane'e yönlendirir."""
-    if _is_heavy(url):
-        with _queue_lock:
-            _heavy_queue.append(link_id)
-        log.info(f"[HEAVY] Kuyruğa eklendi: ID={link_id} | Sıra: {len(_heavy_queue)}")
-        heavy_executor.submit(_tracked_heavy_process, link_id, url)
-    else:
-        log.info(f"[FAST] Anında işleme alındı: ID={link_id}")
-        fast_executor.submit(_tracked_fast_process, link_id, url)
-
-
-def get_queue_position(link_id: int) -> Optional[int]:
-    """Verilen ID'nin kuyruktaki sırasını döner. Fast = her zaman 0."""
-    with _queue_lock:
-        if link_id in _fast_active:
-            return 0
-        if link_id in _heavy_active:
-            return 0
-        if link_id in _heavy_queue:
-            return _heavy_queue.index(link_id) + 1
-    return None
+@app.on_event("shutdown")
+def on_shutdown():
+    """Graceful shutdown — aktif işlemleri tamamla."""
+    log.info("Uygulama kapatılıyor, executor'lar bekleniyor...")
+    shutdown_executors()
 
 
 # =========================================================================
-# FASTAPI ENDPOINTS
+# PYDANTIC MODELLER
 # =========================================================================
 def get_db():
     db = database.SessionLocal()
@@ -194,6 +72,9 @@ class LinkRequest(BaseModel):
         return v
 
 
+# =========================================================================
+# ENDPOINTS
+# =========================================================================
 @app.post("/bypass")
 async def bypass_url(req: LinkRequest, db: Session = Depends(get_db)):
     url = req.url.strip()
@@ -201,15 +82,15 @@ async def bypass_url(req: LinkRequest, db: Session = Depends(get_db)):
     cached_link = db.query(models.BypassLink).filter(models.BypassLink.original_url == url).first()
 
     if cached_link:
-        if cached_link.status == "success":
-            return {"status": "success", "resolved_url": cached_link.resolved_url, "safety_status": cached_link.safety_status, "source": "cache"}
-        elif cached_link.status == "pending":
+        if cached_link.status == LinkStatus.SUCCESS:
+            return {"status": LinkStatus.SUCCESS, "resolved_url": cached_link.resolved_url, "safety_status": cached_link.safety_status, "source": "cache"}
+        elif cached_link.status == LinkStatus.PENDING:
             position = get_queue_position(cached_link.id)
-            return {"status": "pending", "id": cached_link.id, "queue_position": position, "message": "İşleniyor, lütfen bekleyin."}
-        elif cached_link.status in ("failed", "error"):
+            return {"status": LinkStatus.PENDING, "id": cached_link.id, "queue_position": position, "message": "İşleniyor, lütfen bekleyin."}
+        elif cached_link.status in (LinkStatus.FAILED, LinkStatus.ERROR):
             log.info(f"Başarısız link tekrar deneniyor: {url}")
 
-            cached_link.status = "pending"
+            cached_link.status = LinkStatus.PENDING
             cached_link.safety_status = None
             cached_link.webhook_url = req.webhook_url
             db.commit()
@@ -219,11 +100,11 @@ async def bypass_url(req: LinkRequest, db: Session = Depends(get_db)):
             return {
                 "status": "started",
                 "id": cached_link.id,
-                "queue_position": len(_heavy_queue) if _is_heavy(url) else 0,
+                "queue_position": get_heavy_queue_length() if is_heavy(url) else 0,
                 "message": "Tekrar kuyruğa alındı.",
             }
 
-    new_record = models.BypassLink(original_url=url, status="pending", webhook_url=req.webhook_url)
+    new_record = models.BypassLink(original_url=url, status=LinkStatus.PENDING, webhook_url=req.webhook_url)
     db.add(new_record)
     db.commit()
     db.refresh(new_record)
@@ -233,7 +114,7 @@ async def bypass_url(req: LinkRequest, db: Session = Depends(get_db)):
     return {
         "status": "started",
         "id": new_record.id,
-        "queue_position": len(_heavy_queue) if _is_heavy(url) else 0,
+        "queue_position": get_heavy_queue_length() if is_heavy(url) else 0,
         "message": "İşlem kuyruğa alındı.",
     }
 
@@ -255,22 +136,8 @@ async def get_status(id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/queue")
-async def get_queue_info():
-    with _queue_lock:
-        return {
-            "fast": {
-                "active_count": len(_fast_active),
-                "max_workers": 50,
-                "active_ids": list(_fast_active),
-            },
-            "heavy": {
-                "active_count": len(_heavy_active),
-                "max_workers": 3,
-                "active_ids": list(_heavy_active),
-                "waiting_count": len(_heavy_queue),
-                "waiting_ids": list(_heavy_queue),
-            },
-        }
+async def queue_info():
+    return get_queue_info()
 
 
 @app.get("/analysis/{id}")
@@ -285,4 +152,16 @@ async def get_analysis(id: int, db: Session = Depends(get_db)):
         "safety_status": record.safety_status,
         "fail_reason": record.fail_reason,
         "last_scanned_at": record.last_scanned_at,
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """VPS monitoring için basit health check."""
+    queue = get_queue_info()
+    return {
+        "status": "ok",
+        "heavy_active": queue["heavy"]["active_count"],
+        "heavy_waiting": queue["heavy"]["waiting_count"],
+        "fast_active": queue["fast"]["active_count"],
     }

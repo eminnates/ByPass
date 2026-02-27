@@ -9,16 +9,9 @@ Maliyet: ~0, Süre: ~0.5-2sn
 import requests
 from urllib.parse import urlparse
 from app.logger import get_logger
+from app.constants import BypassSentinel, REDIRECT_DOMAINS, extract_domain
 
 _log = get_logger("redirect")
-
-# Desteklenen basit redirect domainleri
-REDIRECT_DOMAINS = {  # set → O(1) lookup
-    "bit.ly", "bit.do", "tinyurl.com", "t.co", "is.gd", "v.gd",
-    "rb.gy", "shorturl.at", "shorturl.asia", "cutt.ly", "tl.tc",
-    "s.id", "t.ly", "tiny.cc", "ow.ly", "buff.ly", "adf.ly",
-    "bc.vc", "soo.gd", "goo.gl", "rebrand.ly",
-}
 
 # Reusable Session → TCP connection pooling (DNS + handshake tasarrufu)
 _session = requests.Session()
@@ -32,12 +25,7 @@ _session.headers.update({
 
 def domain_destekleniyor_mu(url: str) -> bool:
     """URL'nin basit redirect ile çözülebilir olup olmadığını kontrol eder."""
-    try:
-        parsed = urlparse(url)
-        host = parsed.netloc.lower().replace("www.", "")
-        return host in REDIRECT_DOMAINS
-    except:
-        return False
+    return extract_domain(url) in REDIRECT_DOMAINS
 
 
 def resolve(url: str) -> str | None:
@@ -69,7 +57,7 @@ def resolve(url: str) -> str | None:
         # 404 kontrolü
         if response.status_code == 404:
             _log.warning(f"404 döndü: {url}")
-            return "__NOT_FOUND__"
+            return BypassSentinel.NOT_FOUND
         
         # Aynı domain'de kaldıysa çözülemedi
         original_domain = urlparse(url).netloc.lower()
@@ -84,7 +72,7 @@ def resolve(url: str) -> str | None:
         
     except requests.exceptions.Timeout:
         _log.warning(f"Timeout: {url}")
-        return "__TIMEOUT__"
+        return BypassSentinel.TIMEOUT
     except requests.exceptions.ConnectionError:
         _log.warning(f"Bağlantı hatası: {url}")
         return None
