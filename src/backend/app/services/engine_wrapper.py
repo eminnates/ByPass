@@ -7,107 +7,137 @@ Fast:  AyLink API, OUO, Redirect (HTTP only, sınırsız)
 import requests
 import threading
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
 from app.models import BypassLink
-from app.database import SessionLocal
 from app.logger import get_logger
+from app.constants import LinkStatus, FailReason, SafetyStatus, BypassSentinel, BypassType, get_bypass_type
 from .aylink_bypass import AyLinkBypassUltimate
 from .ouo_bypass import OuoAutoBypass
-from .redirect_bypass import resolve as redirect_resolve, domain_destekleniyor_mu
+from .redirect_bypass import resolve as redirect_resolve
+from .trlink_bypass import TRLinkBypass
+from .shortest_bypass import ShorteStBypass
+from .cutyio_bypass import CutyIoBypass
 from .virustotal import scan_url_with_virustotal_sync
 
 log = get_logger("engine")
 
 
+# Bypass tipi → çalıştırma fonksiyonu eşlemesi
+def _run_redirect(url: str):
+    return redirect_resolve(url)
+
+def _run_ouo(url: str):
+    return OuoAutoBypass().hedef_linki_bul(url)
+
+def _run_trlink(url: str):
+    return TRLinkBypass().hedef_linki_bul(url)
+
+def _run_shortest(url: str):
+    return ShorteStBypass().hedef_linki_bul(url)
+
+def _run_cutyio(url: str):
+    return CutyIoBypass().hedef_linki_bul(url)
+
+
+# Registry: BypassType → handler fonksiyonu
+_BYPASS_HANDLERS: dict[BypassType, callable] = {
+    BypassType.REDIRECT: _run_redirect,
+    BypassType.OUO: _run_ouo,
+    BypassType.TRLINK: _run_trlink,
+    BypassType.SHORTEST: _run_shortest,
+    BypassType.CUTYIO: _run_cutyio,
+    # AYLINK fast aşaması ayrı handle edilir (token gerektirir)
+}
+
+
 def _vt_scan_background(link_id: int, url: str):
     """VT taramasını arka planda çalıştırır."""
-    db: Session = SessionLocal()
+    from app.database import get_db_session
+
     try:
         log.info(f"VT arka plan taraması başlıyor: ID={link_id} | {url}")
         vt_status = scan_url_with_virustotal_sync(url)
         
-        record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
-        if record:
-            record.safety_status = vt_status
-            record.last_scanned_at = datetime.now(timezone.utc)
-            db.commit()
-            log.info(f"VT sonucu kaydedildi: ID={link_id} | {vt_status}")
+        with get_db_session() as db:
+            record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
+            if record:
+                record.safety_status = str(vt_status)
+                record.last_scanned_at = datetime.now(timezone.utc)
+        log.info(f"VT sonucu kaydedildi: ID={link_id} | {vt_status}")
     except Exception as e:
         log.warning(f"VT arka plan hatası: ID={link_id} | {e}")
         try:
-            record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
-            if record:
-                record.safety_status = "Error"
-                db.commit()
-        except:
+            with get_db_session() as db:
+                record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
+                if record:
+                    record.safety_status = SafetyStatus.ERROR
+        except Exception:
             pass
-    finally:
-        db.close()
 
 
 def _save_result(link_id: int, cozum, url: str):
     """Bypass sonucunu DB'ye kaydeder ve VT taramasını başlatır."""
-    db: Session = SessionLocal()
+    from app.database import get_db_session
+
     try:
-        record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
-        if not record:
-            return
+        with get_db_session() as db:
+            record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
+            if not record:
+                return
 
-        if cozum and cozum.startswith("__"):
-            record.status = "failed"
-            if cozum == "__NOT_FOUND__":
-                record.fail_reason = "link_not_found"
-                log.warning(f"Link bulunamadı (404): ID={link_id}")
-            elif cozum == "__TIMEOUT__":
-                record.fail_reason = "timeout"
+            if cozum and cozum.startswith("__"):
+                record.status = LinkStatus.FAILED
+                if cozum == BypassSentinel.NOT_FOUND:
+                    record.fail_reason = FailReason.LINK_NOT_FOUND
+                    log.warning(f"Link bulunamadı (404): ID={link_id}")
+                elif cozum == BypassSentinel.TIMEOUT:
+                    record.fail_reason = FailReason.TIMEOUT
+                else:
+                    record.fail_reason = FailReason.UNKNOWN
+            elif cozum:
+                record.resolved_url = cozum
+                record.status = LinkStatus.SUCCESS
+                record.safety_status = SafetyStatus.SCANNING
             else:
-                record.fail_reason = "unknown"
-        elif cozum:
-            record.resolved_url = cozum
-            record.status = "success"
-            record.safety_status = "scanning"
-        else:
-            record.status = "failed"
-            record.fail_reason = "unknown"
-            log.warning(f"Bypass başarısız: ID={link_id}")
+                record.status = LinkStatus.FAILED
+                record.fail_reason = FailReason.UNKNOWN
+                log.warning(f"Bypass başarısız: ID={link_id}")
 
-        db.commit()
-
-        # VT taraması arka planda
-        if record.status == "success" and cozum:
-            vt_thread = threading.Thread(
-                target=_vt_scan_background,
-                args=(link_id, cozum),  # Çözülmüş URL'yi tara
-                daemon=True,
-            )
-            vt_thread.start()
-
-        # Webhook
-        if record.webhook_url:
-            try:
-                payload = {
+            # Webhook (commit öncesi data hazır)
+            webhook_url = record.webhook_url
+            webhook_payload = None
+            if webhook_url:
+                webhook_payload = {
                     "id": record.id,
                     "original_url": record.original_url,
                     "resolved_url": record.resolved_url,
                     "status": record.status,
                     "safety_status": record.safety_status,
                 }
-                requests.post(record.webhook_url, json=payload, timeout=5)
-                log.info(f"Webhook gönderildi -> {record.webhook_url}")
+
+            # Status bilgilerini VT thread için sakla
+            should_scan_vt = record.status == LinkStatus.SUCCESS and cozum
+
+        # Session kapandıktan sonra (commit oldu) → ağ işlemleri
+        if should_scan_vt:
+            from app.queue_manager import vt_executor
+            vt_executor.submit(_vt_scan_background, link_id, cozum)
+
+        if webhook_payload and webhook_url:
+            try:
+                requests.post(webhook_url, json=webhook_payload, timeout=5)
+                log.info(f"Webhook gönderildi -> {webhook_url}")
             except Exception as w_err:
                 log.warning(f"Webhook başarısız: {w_err}")
 
     except Exception as e:
         log.error(f"Sonuç kaydetme hatası: {e}", exc_info=True)
         try:
-            record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
-            if record:
-                record.status = "error"
-                db.commit()
-        except:
+            with get_db_session() as db:
+                record = db.query(BypassLink).filter(BypassLink.id == link_id).first()
+                if record:
+                    record.status = LinkStatus.ERROR
+        except Exception:
             pass
-    finally:
-        db.close()
 
 
 # =========================================================================
@@ -116,10 +146,7 @@ def _save_result(link_id: int, cozum, url: str):
 def run_fast_bypass(link_id: int, url: str, aylink_tokens: dict = None):
     """
     Fast lane: HTTP tabanlı bypass.
-    
-    - Redirect: HTTP HEAD/GET
-    - OUO: curl_cffi + reCAPTCHA  
-    - AyLink API: token'larla /get/tk + /links/go2 (token'lar heavy'den gelir)
+    Registry'den domain → handler eşlemesi ile çalışır.
     """
     try:
         cozum = None
@@ -128,17 +155,11 @@ def run_fast_bypass(link_id: int, url: str, aylink_tokens: dict = None):
             # AyLink 2. aşama — token'lar heavy'den geldi, sadece API çağır
             log.info(f"[FAST] AyLink API bypass: ID={link_id}")
             cozum = AyLinkBypassUltimate.api_bypass(aylink_tokens)
-
-        elif domain_destekleniyor_mu(url):
-            # Redirect bypass
-            log.info(f"[FAST] Redirect bypass: ID={link_id}")
-            cozum = redirect_resolve(url)
-
-        elif "ouo" in url:
-            # OUO bypass
-            log.info(f"[FAST] OUO bypass: ID={link_id}")
-            bot = OuoAutoBypass()
-            cozum = bot.hedef_linki_bul(url)
+        else:
+            bypass_type = get_bypass_type(url)
+            if bypass_type and bypass_type in _BYPASS_HANDLERS:
+                log.info(f"[FAST] {bypass_type.value} bypass: ID={link_id}")
+                cozum = _BYPASS_HANDLERS[bypass_type](url)
 
         _save_result(link_id, cozum, url)
 
@@ -162,8 +183,8 @@ def run_heavy_token_fetch(link_id: int, url: str, fast_callback):
         bot = AyLinkBypassUltimate(debug_mode=False)
         tokens = bot.token_al(url)
 
-        if tokens == "__NOT_FOUND__":
-            _save_result(link_id, "__NOT_FOUND__", url)
+        if tokens == BypassSentinel.NOT_FOUND:
+            _save_result(link_id, BypassSentinel.NOT_FOUND, url)
             return
 
         if not tokens:
@@ -177,20 +198,3 @@ def run_heavy_token_fetch(link_id: int, url: str, fast_callback):
     except Exception as e:
         log.error(f"[HEAVY] Token alma hatası: ID={link_id} | {e}", exc_info=True)
         _save_result(link_id, None, url)
-
-
-# Geriye uyumluluk — eski run_bypass_process (tek çağrı ile tam bypass)
-def run_bypass_process(link_id: int, url: str):
-    """Eski interface — engine_wrapper dışında kullanılmamalı."""
-    if "ay.link" in url or "ay.live" in url:
-        bot = AyLinkBypassUltimate(debug_mode=False)
-        cozum = bot.baslat(url)
-    elif domain_destekleniyor_mu(url):
-        cozum = redirect_resolve(url)
-    elif "ouo" in url:
-        bot = OuoAutoBypass()
-        cozum = bot.hedef_linki_bul(url)
-    else:
-        cozum = None
-
-    _save_result(link_id, cozum, url)

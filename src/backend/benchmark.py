@@ -1,10 +1,13 @@
 """
-ByPass Performans Benchmark Scripti
-====================================
+ByPass Performans Benchmark Scripti v2
+=======================================
+Yeni mimari: Scrapling (AyLink) + curl_cffi (OUO) + HTTP Redirect
+
 Kullanım:
     python3 benchmark.py                   # Tüm testler
     python3 benchmark.py --api-only        # Sadece API testleri (backend çalışıyor olmalı)
-    python3 benchmark.py --engine-only     # Sadece engine testleri (doğrudan Selenium)
+    python3 benchmark.py --engine-only     # Sadece engine testleri (doğrudan)
+    python3 benchmark.py --redirect-only   # Sadece redirect testleri
     python3 benchmark.py --url URL         # Belirli bir URL test et
 
 Sonuçlar: benchmark_results/ klasörüne JSON olarak kaydedilir.
@@ -25,6 +28,7 @@ class C:
     GREEN = '\033[92m'
     YELLOW = '\033[93m'
     RED = '\033[91m'
+    CYAN = '\033[96m'
     END = '\033[0m'
     BOLD = '\033[1m'
 
@@ -56,23 +60,173 @@ class Timer:
         self.elapsed = round(time.perf_counter() - self.start, 2)
 
 # ==========================================
-# TEST 1: API Benchmark (Backend çalışmalı)
+# TEST: Engine Benchmark (Doğrudan motor)
+# ==========================================
+def test_engine(url):
+    sys.path.insert(0, os.path.dirname(__file__))
+
+    sonuc = {
+        "test": "engine",
+        "url": url,
+        "asamalar": {},
+        "toplam_sure": 0,
+        "durum": "pending",
+        "motor": "?"
+    }
+
+    # Motor seç
+    if "ay.link" in url or "ay.live" in url:
+        motor = "AyLink (Scrapling + API)"
+        lane = "HEAVY→FAST"
+
+        with Timer("import") as t:
+            from app.services.aylink_bypass import AyLinkBypassUltimate
+        sonuc["asamalar"]["import"] = t.elapsed
+
+        with Timer("init") as t:
+            bot = AyLinkBypassUltimate(debug_mode=False)
+        sonuc["asamalar"]["init"] = t.elapsed
+
+        # 2 aşamalı test: token_al (HEAVY) + api_bypass (FAST)
+        with Timer("token_al [HEAVY]") as t:
+            tokens = bot.token_al(url)
+        sonuc["asamalar"]["token_al_heavy"] = t.elapsed
+
+        if tokens and tokens != "__NOT_FOUND__":
+            with Timer("api_bypass [FAST]") as t:
+                result = bot.api_bypass(tokens)
+            sonuc["asamalar"]["api_bypass_fast"] = t.elapsed
+        elif tokens == "__NOT_FOUND__":
+            result = "__NOT_FOUND__"
+        else:
+            result = None
+
+    elif "ouo" in url:
+        motor = "OUO (curl_cffi)"
+        lane = "FAST"
+
+        with Timer("import") as t:
+            from app.services.ouo_bypass import OuoAutoBypass
+        sonuc["asamalar"]["import"] = t.elapsed
+
+        with Timer("init") as t:
+            bot = OuoAutoBypass(debug_mode=False)
+        sonuc["asamalar"]["init"] = t.elapsed
+
+        with Timer("bypass [FAST]") as t:
+            result = bot.hedef_linki_bul(url)
+        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+
+    elif "tr.link" in url:
+        motor = "TRLink (curl_cffi)"
+        lane = "FAST"
+
+        with Timer("import") as t:
+            from app.services.trlink_bypass import TRLinkBypass
+        sonuc["asamalar"]["import"] = t.elapsed
+
+        with Timer("init") as t:
+            bot = TRLinkBypass(debug_mode=False)
+        sonuc["asamalar"]["init"] = t.elapsed
+
+        with Timer("bypass [FAST]") as t:
+            result = bot.hedef_linki_bul(url)
+        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+
+    elif "shorte.st" in url or "sh.st" in url or "gestyy.com" in url or "destyy.com" in url:
+        motor = "Shorte.st (curl_cffi)"
+        lane = "FAST"
+
+        with Timer("import") as t:
+            from app.services.shortest_bypass import ShorteStBypass
+        sonuc["asamalar"]["import"] = t.elapsed
+
+        with Timer("init") as t:
+            bot = ShorteStBypass(debug_mode=False)
+        sonuc["asamalar"]["init"] = t.elapsed
+
+        with Timer("bypass [FAST]") as t:
+            result = bot.hedef_linki_bul(url)
+        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+
+    elif "cuty.io" in url or "cutyion.com" in url or "cutyio.com" in url:
+        motor = "Cuty.io (curl_cffi)"
+        lane = "FAST"
+
+        with Timer("import") as t:
+            from app.services.cutyio_bypass import CutyIoBypass
+        sonuc["asamalar"]["import"] = t.elapsed
+
+        with Timer("init") as t:
+            bot = CutyIoBypass(debug_mode=False)
+        sonuc["asamalar"]["init"] = t.elapsed
+
+        with Timer("bypass [FAST]") as t:
+            result = bot.hedef_linki_bul(url)
+        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+
+    else:
+        # Redirect test
+        motor = "Redirect (HTTP)"
+        lane = "FAST"
+
+        with Timer("import") as t:
+            from app.services.redirect_bypass import resolve
+        sonuc["asamalar"]["import"] = t.elapsed
+
+        with Timer("resolve [FAST]") as t:
+            result = resolve(url)
+        sonuc["asamalar"]["resolve_fast"] = t.elapsed
+
+    sonuc["motor"] = motor
+    sonuc["lane"] = lane
+    sonuc["toplam_sure"] = round(sum(sonuc["asamalar"].values()), 2)
+
+    # Sonuç değerlendirme
+    if result and not str(result).startswith("__"):
+        sonuc["durum"] = "basarili"
+        sonuc["resolved_url"] = result
+        durum_icon = renkli('✓', C.GREEN)
+        durum_text = renkli(result, C.CYAN)
+    elif result == "__NOT_FOUND__":
+        sonuc["durum"] = "404"
+        durum_icon = renkli('✗', C.YELLOW)
+        durum_text = renkli("404 - Link bulunamadı", C.YELLOW)
+    elif result == "__TIMEOUT__":
+        sonuc["durum"] = "timeout"
+        durum_icon = renkli('✗', C.RED)
+        durum_text = renkli("Zaman aşımı", C.RED)
+    else:
+        sonuc["durum"] = "basarisiz"
+        durum_icon = renkli('✗', C.RED)
+        durum_text = renkli("Başarısız", C.RED)
+
+    # Ekrana yazdır
+    print(f"  {renkli(f'[{lane}]', C.BLUE)} {motor}")
+    for adim, sure in sonuc["asamalar"].items():
+        if adim == "import" or adim == "init":
+            continue
+        bant = "█" * max(1, int(sure))
+        print(f"     {adim:25s} {renkli(f'{sure:6.2f}s', C.YELLOW)} {renkli(bant, C.BLUE)}")
+    toplam_str = renkli(f'{sonuc["toplam_sure"]:6.2f}s', C.GREEN)
+    print(f"     {'TOPLAM':25s} {toplam_str}")
+    print(f"  {durum_icon} {durum_text}")
+
+    return sonuc
+
+# ==========================================
+# TEST: API Benchmark (Backend çalışmalı)
 # ==========================================
 def test_api(url, base_url="http://127.0.0.1:8000"):
     import requests
 
     sonuc = {
-        "test": "api_benchmark",
+        "test": "api",
         "url": url,
         "asamalar": {},
         "toplam_sure": 0,
         "durum": "pending"
     }
-
-    print(f"\n{renkli('='*60, C.HEADER)}")
-    print(f"{renkli('  API BENCHMARK', C.BOLD)}")
-    print(f"  URL: {url}")
-    print(f"{renkli('='*60, C.HEADER)}\n")
 
     # 1. POST /bypass
     with Timer("POST /bypass") as t:
@@ -80,7 +234,7 @@ def test_api(url, base_url="http://127.0.0.1:8000"):
             resp = requests.post(f"{base_url}/bypass", json={"url": url}, timeout=10)
             data = resp.json()
         except Exception as e:
-            print(f"{renkli('✗', C.RED)} Backend'e bağlanılamadı: {e}")
+            print(f"  {renkli('✗', C.RED)} Backend'e bağlanılamadı: {e}")
             sonuc["durum"] = "baglanti_hatasi"
             return sonuc
 
@@ -88,10 +242,8 @@ def test_api(url, base_url="http://127.0.0.1:8000"):
     print(f"  {renkli('→', C.BLUE)} POST /bypass: {renkli(f'{t.elapsed}s', C.YELLOW)}")
 
     if data.get("status") == "success":
-        # Cache'den geldi
         sonuc["toplam_sure"] = t.elapsed
         sonuc["durum"] = "cache_hit"
-        sonuc["kaynak"] = "cache"
         print(f"  {renkli('✓', C.GREEN)} Cache Hit! Toplam: {renkli(f'{t.elapsed}s', C.GREEN)}")
         return sonuc
 
@@ -99,234 +251,135 @@ def test_api(url, base_url="http://127.0.0.1:8000"):
     queue_pos = data.get("queue_position", "?")
     print(f"  {renkli('→', C.BLUE)} Kuyruk pozisyonu: {queue_pos}")
 
-    # 2. Polling (/status)
+    # 2. Polling
     poll_start = time.perf_counter()
     poll_count = 0
-    ilk_isleme_suresi = None
 
     while True:
         poll_count += 1
         time.sleep(3)
 
-        with Timer(f"GET /status/{link_id}") as t:
-            resp = requests.get(f"{base_url}/status/{link_id}", timeout=10)
-            data = resp.json()
-
-        current_pos = data.get("queue_position")
+        resp = requests.get(f"{base_url}/status/{link_id}", timeout=10)
+        data = resp.json()
         status = data.get("status")
-
-        # İlk kez işlenmeye başladı mı?
-        if current_pos == 0 and ilk_isleme_suresi is None:
-            ilk_isleme_suresi = round(time.perf_counter() - poll_start, 2)
-            sonuc["asamalar"]["kuyruk_bekleme"] = ilk_isleme_suresi
-            print(f"  {renkli('→', C.BLUE)} Kuyruk bekleme: {renkli(f'{ilk_isleme_suresi}s', C.YELLOW)}")
 
         if status == "success":
             poll_sure = round(time.perf_counter() - poll_start, 2)
             sonuc["asamalar"]["bypass_isleme"] = poll_sure
             sonuc["toplam_sure"] = round(poll_sure + sonuc["asamalar"]["post_bypass"], 2)
             sonuc["durum"] = "basarili"
-            sonuc["poll_sayisi"] = poll_count
             sonuc["resolved_url"] = data.get("resolved_url")
-            sonuc["safety_status"] = data.get("safety_status")
-            print(f"  {renkli('✓', C.GREEN)} Başarılı! İşleme: {renkli(f'{poll_sure}s', C.YELLOW)}")
+            toplam = sonuc["toplam_sure"]
+            print(f"  {renkli('✓', C.GREEN)} Başarılı! {renkli(f'{toplam}s', C.GREEN)}")
+            print(f"  → {renkli(data.get('resolved_url', '?'), C.CYAN)}")
             break
-
         elif status in ("failed", "error"):
             poll_sure = round(time.perf_counter() - poll_start, 2)
-            sonuc["asamalar"]["bypass_isleme"] = poll_sure
             sonuc["toplam_sure"] = round(poll_sure + sonuc["asamalar"]["post_bypass"], 2)
-            sonuc["durum"] = f"basarisiz ({data.get('fail_reason', 'unknown')})"
-            sonuc["fail_reason"] = data.get("fail_reason")
-            print(f"  {renkli('✗', C.RED)} Başarısız: {data.get('fail_reason', '?')} ({poll_sure}s)")
+            sonuc["durum"] = f"basarisiz ({data.get('fail_reason', '?')})"
+            print(f"  {renkli('✗', C.RED)} Başarısız: {data.get('fail_reason', '?')}")
             break
-
-        elif poll_count > 60:  # 3 dakika max
+        elif poll_count > 40:
             sonuc["durum"] = "timeout"
-            sonuc["toplam_sure"] = round(time.perf_counter() - poll_start, 2)
-            print(f"  {renkli('✗', C.RED)} Benchmark timeout (3dk)")
+            print(f"  {renkli('✗', C.RED)} Benchmark timeout (2dk)")
             break
 
-        # İlerleme göster
-        pos_str = f"sıra:{current_pos}" if current_pos else "işleniyor"
-        sys.stdout.write(f"\r  {renkli('⏳', C.YELLOW)} Polling #{poll_count} ({pos_str})...   ")
+        sys.stdout.write(f"\r  {renkli('⏳', C.YELLOW)} Polling #{poll_count}...   ")
         sys.stdout.flush()
 
     return sonuc
 
 # ==========================================
-# TEST 2: Engine Benchmark (Doğrudan Selenium)
-# ==========================================
-def test_engine(url):
-    sys.path.insert(0, os.path.dirname(__file__))
-
-    sonuc = {
-        "test": "engine_benchmark",
-        "url": url,
-        "asamalar": {},
-        "toplam_sure": 0,
-        "durum": "pending"
-    }
-
-    print(f"\n{renkli('='*60, C.HEADER)}")
-    print(f"{renkli('  ENGINE BENCHMARK (Doğrudan Selenium)', C.BOLD)}")
-    print(f"  URL: {url}")
-    print(f"{renkli('='*60, C.HEADER)}\n")
-
-    # Hangi bot?
-    if "ay.link" in url or "ay.live" in url:
-        bot_adi = "AyLink"
-        with Timer("Bot import") as t:
-            from app.services.aylink_bypass import AyLinkBypassUltimate
-        sonuc["asamalar"]["import"] = t.elapsed
-
-        with Timer("Bot init") as t:
-            bot = AyLinkBypassUltimate(debug_mode=False)
-        sonuc["asamalar"]["init"] = t.elapsed
-        print(f"  {renkli('→', C.BLUE)} Chrome başlatma: {renkli(f'{t.elapsed}s', C.YELLOW)}")
-
-        with Timer("Bypass") as t:
-            result = bot.baslat(url)
-        sonuc["asamalar"]["bypass"] = t.elapsed
-
-    elif "ouo" in url:
-        bot_adi = "OUO"
-        with Timer("Bot import") as t:
-            from app.services.ouo_bypass import OuoAutoBypass
-        sonuc["asamalar"]["import"] = t.elapsed
-
-        with Timer("Bot init") as t:
-            bot = OuoAutoBypass(debug_mode=False)
-        sonuc["asamalar"]["init"] = t.elapsed
-        print(f"  {renkli('→', C.BLUE)} Chrome başlatma: {renkli(f'{t.elapsed}s', C.YELLOW)}")
-
-        with Timer("Bypass") as t:
-            result = bot.hedef_linki_bul(url)
-        sonuc["asamalar"]["bypass"] = t.elapsed
-
-    else:
-        print(f"  {renkli('✗', C.RED)} Desteklenmeyen URL")
-        sonuc["durum"] = "desteklenmiyor"
-        return sonuc
-
-    sonuc["toplam_sure"] = round(sum(sonuc["asamalar"].values()), 2)
-    sonuc["bot"] = bot_adi
-
-    if result and not result.startswith("__"):
-        sonuc["durum"] = "basarili"
-        sonuc["resolved_url"] = result
-        print(f"  {renkli('✓', C.GREEN)} Sonuç: {result}")
-    elif result == "__NOT_FOUND__":
-        sonuc["durum"] = "404"
-        print(f"  {renkli('✗', C.RED)} 404 - Link bulunamadı")
-    elif result == "__TIMEOUT__":
-        sonuc["durum"] = "timeout"
-        print(f"  {renkli('✗', C.RED)} Zaman aşımı")
-    else:
-        sonuc["durum"] = "basarisiz"
-        print(f"  {renkli('✗', C.RED)} Başarısız")
-
-    print(f"\n  {renkli('⏱  SÜRE DAĞILIMI:', C.BOLD)}")
-    for adim, sure in sonuc["asamalar"].items():
-        bant = "█" * int(sure)
-        print(f"     {adim:20s} {renkli(f'{sure:6.2f}s', C.YELLOW)} {renkli(bant, C.BLUE)}")
-    toplam = sonuc["toplam_sure"]
-    print(f"     {'TOPLAM':20s} {renkli(f'{toplam:6.2f}s', C.GREEN)}")
-
-    return sonuc
-
-# ==========================================
-# TEST 3: Cache Performansı
-# ==========================================
-def test_cache(url, base_url="http://127.0.0.1:8000"):
-    import requests
-
-    print(f"\n{renkli('='*60, C.HEADER)}")
-    print(f"{renkli('  CACHE BENCHMARK', C.BOLD)}")
-    print(f"{renkli('='*60, C.HEADER)}\n")
-
-    sureler = []
-    for i in range(5):
-        with Timer(f"Cache #{i+1}") as t:
-            resp = requests.post(f"{base_url}/bypass", json={"url": url}, timeout=10)
-            data = resp.json()
-        sureler.append(t.elapsed)
-        kaynak = "CACHE" if data.get("source") == "cache" else "YENİ"
-        print(f"  #{i+1} → {renkli(f'{t.elapsed}s', C.YELLOW)} ({kaynak})")
-
-    # Cache olan süreleri filtrele
-    if len(sureler) > 1:
-        cache_sureleri = sureler[1:]  # İlki yeni olabilir
-        print(f"\n  Ortalama cache: {renkli(f'{statistics.mean(cache_sureleri):.3f}s', C.GREEN)}")
-        print(f"  Min/Max: {min(cache_sureleri):.3f}s / {max(cache_sureleri):.3f}s")
-
-    return {"test": "cache_benchmark", "sureler": sureler}
-
-# ==========================================
 # ÖZET RAPOR
 # ==========================================
 def rapor_yazdir(sonuclar):
-    print(f"\n{renkli('='*60, C.HEADER)}")
+    print(f"\n{renkli('='*70, C.HEADER)}")
     print(f"{renkli('  PERFORMANS RAPORU', C.BOLD)}")
-    print(f"{renkli('='*60, C.HEADER)}\n")
+    print(f"{renkli('='*70, C.HEADER)}\n")
 
+    basarili = []
     for s in sonuclar:
-        durum_renk = C.GREEN if "basarili" in s.get("durum", "") or s.get("durum") == "cache_hit" else C.RED
-        sure_val = s.get("toplam_sure", 0)
-        print(f"  {s['test']:25s} | {renkli(f'{sure_val:6.2f}s', C.YELLOW)} | {renkli(s.get('durum', '?'), durum_renk)}")
+        durum = s.get("durum", "?")
+        if "basarili" in durum or durum == "cache_hit":
+            renk = C.GREEN
+            basarili.append(s["toplam_sure"])
+        elif durum == "404":
+            renk = C.YELLOW
+        else:
+            renk = C.RED
 
-    toplam_sureler = [s["toplam_sure"] for s in sonuclar if s.get("toplam_sure", 0) > 0]
-    if toplam_sureler:
-        print(f"\n  Ortalama: {renkli(f'{statistics.mean(toplam_sureler):.2f}s', C.GREEN)}")
+        motor = s.get("motor", s.get("test", "?"))
+        lane = s.get("lane", "")
+        sure = s.get("toplam_sure", 0)
+        print(f"  {motor:30s} {renkli(f'[{lane}]', C.BLUE):>20s}  {renkli(f'{sure:6.2f}s', C.YELLOW)}  {renkli(durum, renk)}")
+
+    if basarili:
+        print(f"\n  {renkli('Başarılı ortalama:', C.BOLD)} {renkli(f'{statistics.mean(basarili):.2f}s', C.GREEN)}")
+        print(f"  {renkli('En hızlı:', C.BOLD)}          {renkli(f'{min(basarili):.2f}s', C.GREEN)}")
+        print(f"  {renkli('En yavaş:', C.BOLD)}          {renkli(f'{max(basarili):.2f}s', C.YELLOW)}")
 
 # ==========================================
 # MAIN
 # ==========================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ByPass Performans Benchmark")
+    parser = argparse.ArgumentParser(description="ByPass Performans Benchmark v2")
     parser.add_argument("--api-only", action="store_true", help="Sadece API testleri")
     parser.add_argument("--engine-only", action="store_true", help="Sadece engine testleri")
-    parser.add_argument("--cache-only", action="store_true", help="Sadece cache testi")
-    parser.add_argument("--url", type=str, help="Test edilecek URL")
+    parser.add_argument("--redirect-only", action="store_true", help="Sadece redirect testleri")
+    parser.add_argument("--url", type=str, help="Belirli bir URL test et")
     args = parser.parse_args()
 
-    # Varsayılan test URL'leri
-    TEST_URLS = {
-        "aylink": "https://ay.link/sarisin",
-        "ouo": "https://ouo.io/94jkLO",
-        "aylink_404": "https://ay.link/bulinkmevcut",
-        "ouo_404": "https://ouo.io/asdfasdf123",
+    # Test URL'leri
+    TESTS = {
+        # Heavy (browser)
+        "aylink":      ("https://ay.live/efsane",          "AyLink"),
+        "aylink_404":  ("https://ay.link/bulinkmevcut",    "AyLink 404"),
+        # Fast (HTTP)
+        "ouo":         ("https://ouo.io/94jkLO",           "OUO"),
+        "ouo_404":     ("https://ouo.io/asdfasdf123",      "OUO 404"),
+        # Redirect (HTTP)
+        "tinyurl":     ("https://tinyurl.com/3mzv5xsn",    "TinyURL"),
+        "cutt":        ("https://cutt.ly/test",             "Cutt.ly"),
+        # TR Shortener'lar (HTTP - curl_cffi)
+        "trlink":      ("https://tr.link/test",             "TRLink"),
+        "shortest":    ("https://shorte.st/test",           "Shorte.st"),
+        "cutyio":      ("https://cuty.io/test",             "Cuty.io"),
     }
 
     sonuclar = []
 
-    if args.url:
-        # Tek URL testi
-        if args.engine_only:
-            sonuclar.append(test_engine(args.url))
-        else:
-            sonuclar.append(test_api(args.url))
-    elif args.cache_only:
-        # Cache test (önce çözülmüş bir URL lazım)
-        test_url = list(TEST_URLS.values())[0]
-        sonuclar.append(test_cache(test_url))
-    elif args.api_only:
-        for isim, url in TEST_URLS.items():
-            print(f"\n{renkli(f'--- Test: {isim} ---', C.BOLD)}")
-            sonuclar.append(test_api(url))
-    elif args.engine_only:
-        # Sadece gerçek URL'ler (404 olmayanlar)
-        for isim in ["aylink", "ouo"]:
-            print(f"\n{renkli(f'--- Test: {isim} ---', C.BOLD)}")
-            sonuclar.append(test_engine(TEST_URLS[isim]))
-    else:
-        # Varsayılan: 404 testleri (hızlı) + 1 API testi
-        print(renkli("\n  404 Algılama Hız Testi\n", C.BOLD))
-        for isim in ["aylink_404", "ouo_404"]:
-            sonuclar.append(test_engine(TEST_URLS[isim]))
+    print(f"\n{renkli('='*70, C.HEADER)}")
+    print(f"{renkli('  BYPASS BENCHMARK v2 — Scrapling / curl_cffi / HTTP', C.BOLD)}")
+    print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{renkli('='*70, C.HEADER)}")
 
-        print(renkli("\n  API Testi (Cache)\n", C.BOLD))
-        sonuclar.append(test_api(TEST_URLS["aylink"]))
+    if args.url:
+        print(f"\n{renkli(f'--- Tek URL Testi ---', C.BOLD)}")
+        if args.api_only:
+            sonuclar.append(test_api(args.url))
+        else:
+            sonuclar.append(test_engine(args.url))
+    elif args.redirect_only:
+        for key in ["tinyurl", "cutt"]:
+            url, label = TESTS[key]
+            print(f"\n{renkli(f'--- {label} ---', C.BOLD)}")
+            sonuclar.append(test_engine(url))
+    elif args.engine_only:
+        for key in ["aylink", "ouo", "tinyurl", "cutt", "trlink", "shortest", "cutyio"]:
+            url, label = TESTS[key]
+            print(f"\n{renkli(f'--- {label} ---', C.BOLD)}")
+            sonuclar.append(test_engine(url))
+    elif args.api_only:
+        for key in ["aylink", "ouo", "tinyurl", "trlink", "shortest", "cutyio"]:
+            url, label = TESTS[key]
+            print(f"\n{renkli(f'--- {label} (API) ---', C.BOLD)}")
+            sonuclar.append(test_api(url))
+    else:
+        # Varsayılan: Tüm engine testleri + 404 testleri
+        for key in ["aylink", "aylink_404", "ouo", "ouo_404", "tinyurl", "cutt", "trlink", "shortest", "cutyio"]:
+            url, label = TESTS[key]
+            print(f"\n{renkli(f'--- {label} ---', C.BOLD)}")
+            sonuclar.append(test_engine(url))
 
     rapor_yazdir(sonuclar)
     kaydet(sonuclar)

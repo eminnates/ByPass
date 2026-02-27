@@ -6,24 +6,20 @@ from curl_cffi import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 from app.logger import get_logger
+from app.constants import BypassSentinel, OUO_DOMAINS, extract_domain
+from .base_bypass import BaseBypass
 
-_log = get_logger("ouo")
 
-OUO_DOMAINS = {"ouo.io", "ouo.press"}
+class OuoAutoBypass(BaseBypass):
+    DOMAINS = OUO_DOMAINS
+    SERVICE_NAME = "ouo"
+    MAX_DEPTH = 10
 
-class OuoAutoBypass:
     def __init__(self, debug_mode=False):
-        self.debug_mode = debug_mode
-        # curl_cffi session configuration
-        self.client = requests.Session()
-        self.client.headers.update({
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        super().__init__(debug_mode, extra_headers={
             'accept-language': 'en-GB,en-US;q=0.9,en;q=0.8',
-            'cache-control': 'max-age=0',
             'referer': 'http://www.google.com/ig/adde?moduleurl=',
-            'upgrade-insecure-requests': '1',
         })
-        _log.info(f"OuoAutoBypass (curl_cffi) hazır. Debug: {debug_mode}")
 
     def _recaptcha_v3(self):
         """Google ReCAPTCHA v3 token'ı programatik olarak çözer."""
@@ -54,16 +50,8 @@ class OuoAutoBypass:
             answer = re.findall(r'"rresp","(.*?)"', reload_html)[0]
             return answer
         except Exception as e:
-            _log.error(f"ReCAPTCHA çözme hatası: {e}")
+            self._log.error(f"ReCAPTCHA çözme hatası: {e}")
             raise e
-
-    def _is_ouo(self, url):
-        """URL'nin ouo domain'i olup olmadığını kontrol eder."""
-        try:
-            domain = urlparse(url).netloc.lower().replace("www.", "")
-            return domain in OUO_DOMAINS
-        except:
-            return False
 
     def _bypass_single(self, url):
         """Tek bir ouo linkini bypass eder."""
@@ -73,21 +61,20 @@ class OuoAutoBypass:
         id_val = work_url.split('/')[-1]
         next_url = f"{p.scheme}://{p.hostname}/go/{id_val}"
 
-        _log.info(f"İstek atılıyor: {work_url}")
+        self._log.info(f"İstek atılıyor: {work_url}")
         res = self.client.get(work_url, impersonate="chrome124", timeout=30)
 
         # 404 Kontrolü
         if res.status_code == 404 or "ouo.io/js/404.js" in res.text or "LINK NOT FOUND" in res.text:
-            return "__NOT_FOUND__"
+            return BypassSentinel.NOT_FOUND
             
         if res.status_code != 200:
-            _log.warning(f"HTTP {res.status_code} alındı.")
+            self._log.warning(f"HTTP {res.status_code} alındı.")
             return None
 
         has_form = '<form' in res.text.lower()
         if not has_form:
-            _log.warning("Form bulunamadı (Cloudflare engeli olabilir).")
-            # Hata analizi için HTML'i loglayabiliriz ama şimdilik gerek yok
+            self._log.warning("Form bulunamadı (Cloudflare engeli olabilir).")
             return None
 
         current_res = res
@@ -98,7 +85,7 @@ class OuoAutoBypass:
             soup = BeautifulSoup(current_res.content, 'lxml')
             form = soup.find('form')
             if not form:
-                _log.warning(f"Adım {step+1}: Form yok.")
+                self._log.warning(f"Adım {step+1}: Form yok.")
                 return None
 
             inputs = form.find_all("input", {"name": re.compile(r"token$")})
@@ -119,47 +106,45 @@ class OuoAutoBypass:
         return current_res.headers.get('Location')
 
     def hedef_linki_bul(self, url):
-        """Zincirleme bypass mantığı ile hedef linki bulur."""
-        _log.info(f"🚀 SÜREÇ BAŞLATILIYOR (curl_cffi): {url}")
+        """OUO özel: chain tracking ile zincirleme bypass."""
+        self._log.info(f"🚀 SÜREÇ BAŞLATILIYOR (curl_cffi): {url}")
         
         current_url = url
         chain = [url]
-        max_depth = 10
         start_time = time.time()
 
-        for depth in range(1, max_depth + 1):
-            _log.info(f"🔗 [{depth}] Bypass deneniyor: {current_url}")
+        for depth in range(1, self.MAX_DEPTH + 1):
+            self._log.info(f"🔗 [{depth}] Bypass deneniyor: {current_url}")
             
             try:
                 result = self._bypass_single(current_url)
             except Exception as e:
-                _log.error(f"Bypass sırasında hata: {e}")
+                self._log.error(f"Bypass sırasında hata: {e}")
                 return None
 
-            if result == "__NOT_FOUND__":
-                _log.warning("Link bulunamadı (404).")
-                return "__NOT_FOUND__"
+            if result == BypassSentinel.NOT_FOUND:
+                self._log.warning("Link bulunamadı (404).")
+                return BypassSentinel.NOT_FOUND
                 
             if not result:
-                _log.warning("Bypass başarısız, sonuç dönmedi.")
+                self._log.warning("Bypass başarısız, sonuç dönmedi.")
                 return None
 
             chain.append(result)
-            _log.info(f"✅ Adım sonucu: {result}")
+            self._log.info(f"✅ Adım sonucu: {result}")
 
-            if self._is_ouo(result):
-                _log.info("🔄 Sonuç yine ouo! Tekrar bypass ediliyor...")
+            if self.is_own_domain(result):
+                self._log.info("🔄 Sonuç yine ouo! Tekrar bypass ediliyor...")
                 current_url = result
             else:
                 total_time = time.time() - start_time
-                _log.info(f"🎯 FİNAL ULAŞILDI: {result} ({total_time:.2f}s)")
+                self._log.info(f"🎯 FİNAL ULAŞILDI: {result} ({total_time:.2f}s)")
                 return result
 
-        _log.warning("⚠️ Max derinliğe ulaşıldı.")
+        self._log.warning("⚠️ Max derinliğe ulaşıldı.")
         return chain[-1]
 
 if __name__ == "__main__":
-    # Test
     bot = OuoAutoBypass(debug_mode=True)
     link = "https://ouo.io/94jkLO" 
     sonuc = bot.hedef_linki_bul(link)

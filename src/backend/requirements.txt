@@ -5,11 +5,9 @@ pydantic
 python-dotenv
 requests
 httpx
-alembic
 pytest
 pytest-asyncio
 python-multipart
-passlib[bcrypt]
 scrapling[fetchers]
 curl_cffi
 beautifulsoup4

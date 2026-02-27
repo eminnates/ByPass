@@ -10,6 +10,7 @@ import httpx
 from urllib.parse import urlparse
 from scrapling.fetchers import StealthyFetcher
 from app.logger import get_logger
+from app.constants import BypassSentinel
 
 _log = get_logger("aylink")
 
@@ -53,7 +54,7 @@ class AyLinkBypassUltimate:
             # 404 kontrolü
             if "404 - Link bulunamad" in html or ">Link bulunamad" in html or "404" in title:
                 self.log("❌ Link bulunamadı (404).")
-                return "__NOT_FOUND__"
+                return BypassSentinel.NOT_FOUND
 
             # Token çıkar
             m = re.search(
@@ -146,7 +147,7 @@ class AyLinkBypassUltimate:
                         try:
                             redir_resp = client.get(final_url, follow_redirects=True)
                             final_url = str(redir_resp.url)
-                        except:
+                        except Exception:
                             pass
                     
                     _log.info(f"[FAST] 🎯 Final URL: {final_url}")
@@ -175,8 +176,8 @@ class AyLinkBypassUltimate:
             # Heavy aşama
             tokens = self.token_al(url)
             
-            if tokens == "__NOT_FOUND__":
-                return "__NOT_FOUND__"
+            if tokens == BypassSentinel.NOT_FOUND:
+                return BypassSentinel.NOT_FOUND
             if not tokens:
                 return None
 
