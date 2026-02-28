@@ -39,10 +39,24 @@ class AyLinkBypassUltimate:
         self.log(f"📡 [HEAVY] Sayfa yükleniyor: {url}")
         
         try:
+            extra_flags = (
+                "--disable-dev-shm-usage",     # Avoids /dev/shm out of memory on small VPS
+                "--no-sandbox",                 # Reduces overhead
+                "--disable-setuid-sandbox",
+                "--single-process",             # Critical for aggressive RAM usage reduction
+                "--disable-gpu",                # Redundant but safe
+                "--disable-software-rasterizer",
+                "--disable-extensions",
+                "--mute-audio",
+                "--js-flags=--max-old-space-size=128", # Limits V8 JS engine memory
+            )
+
             page = StealthyFetcher.fetch(
                 url,
                 headless=True,
                 network_idle=True,
+                disable_resources=True,    # Drops images, fonts, css, media etc.
+                extra_flags=extra_flags
             )
 
             html = page.html_content

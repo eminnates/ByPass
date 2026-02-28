@@ -19,6 +19,8 @@ import os
 import sys
 import argparse
 import statistics
+import threading
+import psutil
 from datetime import datetime
 
 # --- RENK KODLARI ---
@@ -46,19 +48,63 @@ def kaydet(sonuclar):
     print(f"\n{renkli('📁 Sonuçlar kaydedildi:', C.GREEN)} {dosya}")
 
 # --- ZAMANLAYICI ---
+
+class MemMonitor:
+    def __init__(self):
+        self.process = psutil.Process()
+        self.running = True
+        self.peak_mb = 0.0
+        self.thread = threading.Thread(target=self._monitor, daemon=True)
+
+    def _monitor(self):
+        while self.running:
+            try:
+                mem = self.process.memory_info().rss
+                for child in self.process.children(recursive=True):
+                    try:
+                        mem += child.memory_info().rss
+                    except Exception:
+                        pass
+                mb = mem / (1024 * 1024)
+                if mb > self.peak_mb:
+                    self.peak_mb = mb
+            except Exception:
+                pass
+            time.sleep(0.05)
+            
+    def start(self):
+        self.thread.start()
+        
+    def stop(self):
+        self.running = False
+        self.thread.join(timeout=0.5)
+        return self.peak_mb
+
 class Timer:
-    def __init__(self, label):
+    def __init__(self, label, track_mem=True):
         self.label = label
-        self.start = None
-        self.elapsed = None
+        self.track_mem = track_mem
+        self.start_perf = None
+        self.start_process = None
+        self.mem_monitor = None
+        
+        self.elapsed = 0.0
+        self.cpu_time = 0.0
+        self.peak_mem = 0.0
 
     def __enter__(self):
-        self.start = time.perf_counter()
+        self.start_perf = time.perf_counter()
+        self.start_process = time.process_time()
+        if self.track_mem:
+            self.mem_monitor = MemMonitor()
+            self.mem_monitor.start()
         return self
 
     def __exit__(self, *args):
-        self.elapsed = round(time.perf_counter() - self.start, 2)
-
+        self.elapsed = round(time.perf_counter() - self.start_perf, 3)
+        self.cpu_time = round(time.process_time() - self.start_process, 3)
+        if self.track_mem and self.mem_monitor:
+            self.peak_mem = round(self.mem_monitor.stop(), 1)
 # ==========================================
 # TEST: Engine Benchmark (Doğrudan motor)
 # ==========================================
@@ -69,6 +115,7 @@ def test_engine(url):
         "test": "engine",
         "url": url,
         "asamalar": {},
+        "alt_asamalar": {}, # sub-phases that don't add to sum
         "toplam_sure": 0,
         "durum": "pending",
         "motor": "?"
@@ -79,27 +126,51 @@ def test_engine(url):
         motor = "AyLink (Scrapling + API)"
         lane = "HEAVY→FAST"
 
-        with Timer("import") as t:
-            from app.services.aylink_bypass import AyLinkBypassUltimate
-        sonuc["asamalar"]["import"] = t.elapsed
 
-        with Timer("init") as t:
-            bot = AyLinkBypassUltimate(debug_mode=False)
-        sonuc["asamalar"]["init"] = t.elapsed
+        import scrapling.fetchers.stealth_chrome
+        original_enter = scrapling.fetchers.stealth_chrome.StealthySession.__enter__
+        original_fetch = scrapling.fetchers.stealth_chrome.StealthySession.fetch
+        
+        def mock_enter(self):
+            t0 = time.perf_counter()
+            res = original_enter(self)
+            sonuc["alt_asamalar"]["browser_init"] = {"time": round(time.perf_counter() - t0, 3)}
+            return res
+            
+        def mock_fetch(self, target_url, *args, **kwargs):
+            t0 = time.perf_counter()
+            res = original_fetch(self, target_url, *args, **kwargs)
+            sonuc["alt_asamalar"]["page_load_and_wait"] = {"time": round(time.perf_counter() - t0, 3)}
+            return res
+            
+        scrapling.fetchers.stealth_chrome.StealthySession.__enter__ = mock_enter
+        scrapling.fetchers.stealth_chrome.StealthySession.fetch = mock_fetch
+        
+        try:
+            with Timer("import", track_mem=False) as t:
+                from app.services.aylink_bypass import AyLinkBypassUltimate
+            sonuc["asamalar"]["import"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
-        # 2 aşamalı test: token_al (HEAVY) + api_bypass (FAST)
-        with Timer("token_al [HEAVY]") as t:
-            tokens = bot.token_al(url)
-        sonuc["asamalar"]["token_al_heavy"] = t.elapsed
+            with Timer("init") as t:
+                bot = AyLinkBypassUltimate(debug_mode=False)
+            sonuc["asamalar"]["init"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
-        if tokens and tokens != "__NOT_FOUND__":
-            with Timer("api_bypass [FAST]") as t:
-                result = bot.api_bypass(tokens)
-            sonuc["asamalar"]["api_bypass_fast"] = t.elapsed
-        elif tokens == "__NOT_FOUND__":
-            result = "__NOT_FOUND__"
-        else:
-            result = None
+            # 2 aşamalı test: token_al (HEAVY) + api_bypass (FAST)
+            with Timer("token_al [HEAVY]") as t:
+                tokens = bot.token_al(url)
+            sonuc["asamalar"]["token_al_heavy"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
+
+            if tokens and tokens != "__NOT_FOUND__":
+                with Timer("api_bypass [FAST]") as t:
+                    result = bot.api_bypass(tokens)
+                sonuc["asamalar"]["api_bypass_fast"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
+            elif tokens == "__NOT_FOUND__":
+                result = "__NOT_FOUND__"
+            else:
+                result = None
+        finally:
+            scrapling.fetchers.stealth_chrome.StealthySession.__enter__ = original_enter
+            scrapling.fetchers.stealth_chrome.StealthySession.fetch = original_fetch
 
     elif "ouo" in url:
         motor = "OUO (curl_cffi)"
@@ -107,15 +178,15 @@ def test_engine(url):
 
         with Timer("import") as t:
             from app.services.ouo_bypass import OuoAutoBypass
-        sonuc["asamalar"]["import"] = t.elapsed
+        sonuc["asamalar"]["import"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("init") as t:
             bot = OuoAutoBypass(debug_mode=False)
-        sonuc["asamalar"]["init"] = t.elapsed
+        sonuc["asamalar"]["init"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("bypass [FAST]") as t:
             result = bot.hedef_linki_bul(url)
-        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+        sonuc["asamalar"]["bypass_fast"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
     elif "tr.link" in url:
         motor = "TRLink (curl_cffi)"
@@ -123,15 +194,15 @@ def test_engine(url):
 
         with Timer("import") as t:
             from app.services.trlink_bypass import TRLinkBypass
-        sonuc["asamalar"]["import"] = t.elapsed
+        sonuc["asamalar"]["import"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("init") as t:
             bot = TRLinkBypass(debug_mode=False)
-        sonuc["asamalar"]["init"] = t.elapsed
+        sonuc["asamalar"]["init"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("bypass [FAST]") as t:
             result = bot.hedef_linki_bul(url)
-        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+        sonuc["asamalar"]["bypass_fast"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
     elif "shorte.st" in url or "sh.st" in url or "gestyy.com" in url or "destyy.com" in url:
         motor = "Shorte.st (curl_cffi)"
@@ -139,15 +210,15 @@ def test_engine(url):
 
         with Timer("import") as t:
             from app.services.shortest_bypass import ShorteStBypass
-        sonuc["asamalar"]["import"] = t.elapsed
+        sonuc["asamalar"]["import"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("init") as t:
             bot = ShorteStBypass(debug_mode=False)
-        sonuc["asamalar"]["init"] = t.elapsed
+        sonuc["asamalar"]["init"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("bypass [FAST]") as t:
             result = bot.hedef_linki_bul(url)
-        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+        sonuc["asamalar"]["bypass_fast"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
     elif "cuty.io" in url or "cutyion.com" in url or "cutyio.com" in url:
         motor = "Cuty.io (curl_cffi)"
@@ -155,15 +226,15 @@ def test_engine(url):
 
         with Timer("import") as t:
             from app.services.cutyio_bypass import CutyIoBypass
-        sonuc["asamalar"]["import"] = t.elapsed
+        sonuc["asamalar"]["import"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("init") as t:
             bot = CutyIoBypass(debug_mode=False)
-        sonuc["asamalar"]["init"] = t.elapsed
+        sonuc["asamalar"]["init"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("bypass [FAST]") as t:
             result = bot.hedef_linki_bul(url)
-        sonuc["asamalar"]["bypass_fast"] = t.elapsed
+        sonuc["asamalar"]["bypass_fast"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
     else:
         # Redirect test
@@ -172,15 +243,15 @@ def test_engine(url):
 
         with Timer("import") as t:
             from app.services.redirect_bypass import resolve
-        sonuc["asamalar"]["import"] = t.elapsed
+        sonuc["asamalar"]["import"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
         with Timer("resolve [FAST]") as t:
             result = resolve(url)
-        sonuc["asamalar"]["resolve_fast"] = t.elapsed
+        sonuc["asamalar"]["resolve_fast"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
     sonuc["motor"] = motor
     sonuc["lane"] = lane
-    sonuc["toplam_sure"] = round(sum(sonuc["asamalar"].values()), 2)
+    sonuc["toplam_sure"] = round(sum(v["time"] for v in sonuc["asamalar"].values()), 2)
 
     # Sonuç değerlendirme
     if result and not str(result).startswith("__"):
@@ -203,11 +274,23 @@ def test_engine(url):
 
     # Ekrana yazdır
     print(f"  {renkli(f'[{lane}]', C.BLUE)} {motor}")
-    for adim, sure in sonuc["asamalar"].items():
+    for adim, metrics in sonuc["asamalar"].items():
         if adim == "import" or adim == "init":
             continue
+        sure = metrics["time"]
+        cpu = metrics["cpu"]
+        mem = metrics["mem"]
         bant = "█" * max(1, int(sure))
-        print(f"     {adim:25s} {renkli(f'{sure:6.2f}s', C.YELLOW)} {renkli(bant, C.BLUE)}")
+        
+        metrics_str = f"cpu: {cpu:5.2f}s | mem: {mem:5.1f}MB"
+        print(f"     {adim:25s} {renkli(f'{sure:6.2f}s', C.YELLOW)} [{renkli(metrics_str, C.CYAN)}] {renkli(bant, C.BLUE)}")
+
+    # Print sub-phases
+    for adim, metrics in sonuc.get("alt_asamalar", {}).items():
+        sure = metrics["time"]
+        bant = "░" * max(1, int(sure))
+        print(f"     {renkli('└─ '+adim, C.cyan if hasattr(C, 'cyan') else C.CYAN):25s} {renkli(f'{sure:6.2f}s', C.YELLOW)} {renkli(bant, C.BLUE)}")
+
     toplam_str = renkli(f'{sonuc["toplam_sure"]:6.2f}s', C.GREEN)
     print(f"     {'TOPLAM':25s} {toplam_str}")
     print(f"  {durum_icon} {durum_text}")
@@ -238,7 +321,7 @@ def test_api(url, base_url="http://127.0.0.1:8000"):
             sonuc["durum"] = "baglanti_hatasi"
             return sonuc
 
-    sonuc["asamalar"]["post_bypass"] = t.elapsed
+    sonuc["asamalar"]["post_bypass"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
     print(f"  {renkli('→', C.BLUE)} POST /bypass: {renkli(f'{t.elapsed}s', C.YELLOW)}")
 
     if data.get("status") == "success":
@@ -265,7 +348,7 @@ def test_api(url, base_url="http://127.0.0.1:8000"):
 
         if status == "success":
             poll_sure = round(time.perf_counter() - poll_start, 2)
-            sonuc["asamalar"]["bypass_isleme"] = poll_sure
+            sonuc["asamalar"]["bypass_isleme"] = {"time": poll_sure, "cpu": 0, "mem": 0}
             sonuc["toplam_sure"] = round(poll_sure + sonuc["asamalar"]["post_bypass"], 2)
             sonuc["durum"] = "basarili"
             sonuc["resolved_url"] = data.get("resolved_url")

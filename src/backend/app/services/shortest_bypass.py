@@ -26,7 +26,7 @@ class ShorteStBypass(BaseBypass):
         self._log.info(f"İstek atılıyor: {url}")
 
         try:
-            res = self.client.get(url, impersonate="chrome124", timeout=30)
+            res = self.client.get(url, impersonate="chrome124", timeout=8)
 
             # 404 Kontrolü
             if res.status_code == 404:
