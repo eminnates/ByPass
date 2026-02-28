@@ -33,22 +33,24 @@ class OuoAutoBypass(BaseBypass):
             params_str = matches[1]
 
             anchor_url = url_base + 'anchor?' + params_str
-            req = urllib.request.Request(anchor_url)
-            with urllib.request.urlopen(req) as resp:
-                anchor_html = resp.read().decode()
+            resp = self.client.get(anchor_url, timeout=5)
+            anchor_html = resp.text
 
-            token = re.findall(r'"recaptcha-token" value="(.*?)"', anchor_html)[0]
+            token_match = re.findall(r'"recaptcha-token" value="(.*?)"', anchor_html)
+            if not token_match:
+                raise Exception("recaptcha-token bulunamadı")
+            token = token_match[0]
             params = dict(pair.split('=') for pair in params_str.split('&'))
             post_data = post_data.format(params["v"], token, params["k"], params["co"])
 
             reload_url = url_base + 'reload?k=' + params["k"]
-            req = urllib.request.Request(reload_url, data=post_data.encode(),
-                                        headers={'content-type': 'application/x-www-form-urlencoded'})
-            with urllib.request.urlopen(req) as resp:
-                reload_html = resp.read().decode()
+            resp = self.client.post(reload_url, data=post_data, headers={'content-type': 'application/x-www-form-urlencoded'}, timeout=5)
+            reload_html = resp.text
 
-            answer = re.findall(r'"rresp","(.*?)"', reload_html)[0]
-            return answer
+            answer_match = re.findall(r'"rresp","(.*?)"', reload_html)
+            if not answer_match:
+                raise Exception("rresp bulunamadı")
+            return answer_match[0]
         except Exception as e:
             self._log.error(f"ReCAPTCHA çözme hatası: {e}")
             raise e
@@ -62,7 +64,7 @@ class OuoAutoBypass(BaseBypass):
         next_url = f"{p.scheme}://{p.hostname}/go/{id_val}"
 
         self._log.info(f"İstek atılıyor: {work_url}")
-        res = self.client.get(work_url, impersonate="chrome124", timeout=30)
+        res = self.client.get(work_url, impersonate="chrome124", timeout=10)
 
         # 404 Kontrolü
         if res.status_code == 404 or "ouo.io/js/404.js" in res.text or "LINK NOT FOUND" in res.text:
@@ -98,7 +100,7 @@ class OuoAutoBypass(BaseBypass):
 
             h = {'content-type': 'application/x-www-form-urlencoded'}
             current_res = self.client.post(next_url, data=data, headers=h,
-                                         allow_redirects=False, impersonate="chrome124", timeout=30)
+                                         allow_redirects=False, impersonate="chrome124", timeout=10)
             
             # Sonraki adım URL'si
             next_url = f"{p.scheme}://{p.hostname}/xreallcygo/{id_val}"

@@ -12,3 +12,4 @@ scrapling[fetchers]
 curl_cffi
 beautifulsoup4
 lxml
+python-telegram-bot
