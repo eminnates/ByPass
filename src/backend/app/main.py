@@ -5,12 +5,16 @@ Tüm HTTP endpoint'leri burada tanımlı.
 Kuyruk yönetimi queue_manager modülünde merkezileştirilmiştir.
 """
 
+import os
+from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
 from urllib.parse import urlparse
 from typing import Optional
+
+load_dotenv()
 
 from . import models, database
 from .constants import LinkStatus, ALLOWED_DOMAINS, is_heavy
@@ -24,9 +28,14 @@ models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI()
 
+# .env'den ALLOWED_ORIGINS oku (virgülle ayrılmış liste)
+# Örnek: ALLOWED_ORIGINS=https://reklamatla.com,http://localhost:3000
+_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = [o.strip() for o in _origins_raw.split(",")] if _origins_raw != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
