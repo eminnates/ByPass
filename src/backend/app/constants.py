@@ -58,6 +58,29 @@ class BypassType(StrEnum):
     CUTYIO = "cutyio"
 
 
+class ApiPlan(StrEnum):
+    """API kullanım planları ve günlük istek limitleri."""
+    FREE = "free"           # 50 istek/gün
+    STARTER = "starter"     # 500 istek/gün
+    PRO = "pro"             # 5.000 istek/gün
+    BUSINESS = "business"   # 50.000 istek/gün
+    WEBSITE = "website"     # Sınırsız — kendi web sitemiz için
+
+
+# Plan → günlük limit eşlemesi (0 = sınırsız)
+PLAN_DAILY_LIMITS: dict[ApiPlan, int] = {
+    ApiPlan.FREE: 50,
+    ApiPlan.STARTER: 500,
+    ApiPlan.PRO: 5_000,
+    ApiPlan.BUSINESS: 50_000,
+    ApiPlan.WEBSITE: 0,  # Sınırsız
+}
+
+
+# Genel rate limit (IP bazlı, dakika başına)
+RATE_LIMIT_PER_MINUTE = 30
+
+
 # =========================================================================
 # MERKEZİ DOMAIN REGISTRY — Tek kaynak, tek güncelleme noktası
 # =========================================================================
