@@ -4,19 +4,19 @@ import { useEffect, useRef } from 'react';
 
 // #region agent log
 const log = (location: string, message: string, data: any, hypothesisId: string) => {
-  fetch('http://127.0.0.1:7243/ingest/362f5994-0160-415c-b13f-4aa330764abd', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location,
-      message,
-      data,
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId
-    })
-  }).catch(() => {});
+    fetch('http://127.0.0.1:7243/ingest/362f5994-0160-415c-b13f-4aa330764abd', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            location,
+            message,
+            data,
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            runId: 'run1',
+            hypothesisId
+        })
+    }).catch(() => { });
 };
 // #endregion
 
@@ -30,7 +30,7 @@ interface AdUnitProps {
 
 const AdUnit = ({ client, slot, format = 'auto', responsive = 'true', style }: AdUnitProps) => {
     // #region agent log
-    const adRef = useRef<HTMLElement>(null);
+    const adRef = useRef<HTMLModElement>(null);
     // #endregion
     const isLoaded = useRef(false); // Reklamın tekrar tekrar yüklenmesini önler
 
