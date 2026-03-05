@@ -353,6 +353,10 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Link href="/blog" className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+              ${isDarkMode ? 'text-gray-400 hover:text-purple-400 hover:bg-white/5' : 'text-gray-500 hover:text-purple-600 hover:bg-purple-50'}`}>
+              Blog
+            </Link>
             <LanguageSelector currentLang={lang} setLang={setLang} isDarkMode={isDarkMode} />
             <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
               {isDarkMode ? <Moon size={18} className="text-yellow-300" /> : <Sun size={18} className="text-orange-500" />}
