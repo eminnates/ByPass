@@ -33,6 +33,7 @@ load_dotenv()
 # =========================================================================
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 API_BASE_URL = os.getenv("BYPASS_API_URL", "http://127.0.0.1:8000")
+BOT_API_KEY = os.getenv("BOT_API_KEY", "")  # website planı API key
 
 # Polling ayarları
 MAX_POLL_ATTEMPTS = 60      # Maks bekleme: 60 × 2s = 120 saniye
@@ -442,7 +443,7 @@ async def _do_bypass(message, url: str, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, headers={"X-API-Key": BOT_API_KEY}) as client:
             # 1. Bypass isteği gönder
             resp = await client.post(
                 f"{API_BASE_URL}/bypass",
