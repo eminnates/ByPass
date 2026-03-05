@@ -1,7 +1,7 @@
 "use client";
 
 // --- API BASE URL (VPS'de .env.production'dan okunur) ---
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://10.13.163.46';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
