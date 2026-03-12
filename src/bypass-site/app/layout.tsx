@@ -21,7 +21,14 @@ export const metadata: Metadata = {
     template: "%s | ReklamAtla",
   },
   description: "Kısaltılmış linkleri anında bypass et. Reklamsız, hızlı, güvenli.",
-  keywords: ["linkvertise bypass", "link bypass", "url bypass", "ouo bypass", "aylink bypass", "reklam atla"],
+  keywords: [
+    "linkvertise bypass",
+    "link bypass",
+    "url bypass",
+    "ouo bypass",
+    "aylink bypass",
+    "reklam atla",
+  ],
   metadataBase: new URL("https://reklamatla.com"),
   manifest: "/manifest.json",
   appleWebApp: {
@@ -43,14 +50,34 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="tr">
       <head>
+        {/*
+          FIX #1 — Dark mode flash önleme
+          Bu script HTML parse edilirken (React hydration'dan önce) çalışır.
+          localStorage'daki tercihi okur; yoksa sistem tercihine bakar.
+          body'ye 'light-mode' class'ı ekler — globals.css bunu override olarak kullanır.
+          dangerouslySetInnerHTML kullanmak burada kasıtlı ve güvenli: sadece kendi kodumuzu çalıştırıyoruz.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('theme');
+                  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  // Kayıtlı tercih yoksa sistem tercihine bak; sistem light ise light-mode ekle
+                  if (stored === 'light' || (!stored && !prefersDark)) {
+                    document.body.classList.add('light-mode');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+
         {/* Google AdSense */}
         <Script
           async
@@ -59,7 +86,7 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
 
-        {/* Service Worker Registration */}
+        {/* Service Worker */}
         <Script id="sw-register" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {
@@ -72,11 +99,7 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body
-        className={`${space.className} bg-black text-white antialiased`}
-      >
-        {children}
-      </body>
+      <body className={`${space.className} antialiased`}>{children}</body>
     </html>
   );
 }

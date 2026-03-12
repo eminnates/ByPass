@@ -2,14 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Tema değişkenleri ── */
 :root {
-  --foreground-rgb: 255, 255, 255;
-  --background-start-rgb: 0, 0, 0;
-  --background-end-rgb: 0, 0, 0;
+  --bg-primary: #0a0a0f;
+  --fg-primary: 255, 255, 255;
 }
 
+/* 
+  FIX #1 — Dark mode flash (SSR)
+  body'nin background'u page.tsx'deki dark bg ile eşleştirildi.
+  Artık #18181b → #0a0a0f, hydration öncesi renk farkı yok.
+  layout.tsx'deki inline script ile birlikte çalışır.
+*/
 body {
-  color: rgb(var(--foreground-rgb));
-  background: #18181b;
-  /* Varsayılan koyu arka plan */
+  color: rgb(var(--fg-primary));
+  background: var(--bg-primary);
+}
+
+/* Light mode override — layout.tsx'deki script class ekleyince devreye girer */
+body.light-mode {
+  --bg-primary: #f8f9fa;
+  --fg-primary: 17, 24, 39;
+  background: var(--bg-primary);
+  color: rgb(var(--fg-primary));
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #a855f7;
+  border-radius: 20px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #a855f7 transparent;
+}
+
+/* ── Animasyonlar ── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes zoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.zoom-in-95 {
+  animation: zoomIn 0.3s ease forwards;
 }
