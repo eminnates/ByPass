@@ -6,3 +6,4 @@ logs/
 benchmark_results/
 src/backend/sql_app.db-shm
 src/backend/sql_app.db-wal
+.vscode/

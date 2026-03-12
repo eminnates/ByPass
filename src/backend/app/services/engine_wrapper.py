@@ -4,7 +4,7 @@ Bypass Engine Wrapper — Heavy/Fast 2 Aşamalı Mimari
 Heavy: AyLink token alma (browser gerekli, 3 worker limit)
 Fast:  AyLink API, OUO, Redirect (HTTP only, sınırsız)
 """
-import requests
+import httpx
 import threading
 from datetime import datetime, timezone
 from app.models import BypassLink
@@ -124,7 +124,7 @@ def _save_result(link_id: int, cozum, url: str):
 
         if webhook_payload and webhook_url:
             try:
-                requests.post(webhook_url, json=webhook_payload, timeout=5)
+                httpx.post(webhook_url, json=webhook_payload, timeout=5)
                 log.info(f"Webhook gönderildi -> {webhook_url}")
             except Exception as w_err:
                 log.warning(f"Webhook başarısız: {w_err}")
