@@ -1,7 +1,7 @@
 "use client";
 
-// --- API BASE URL ---
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://10.13.163.46';
+// --- LOCAL API PROXY ---
+const API_BASE = '/api';
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
