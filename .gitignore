@@ -1,9 +1,13 @@
 .venv/
 venv/
 .env
+.env.local
 __pycache__/
 logs/
 benchmark_results/
-src/backend/sql_app.db-shm
-src/backend/sql_app.db-wal
+*.db
+*.db-shm
+*.db-wal
 .vscode/
+node_modules/
+.next/
