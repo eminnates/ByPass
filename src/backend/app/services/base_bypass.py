@@ -32,23 +32,22 @@ class BaseBypass(ABC):
     SERVICE_NAME: str = "base"
     MAX_DEPTH: int = 5
 
-    def __init__(self, debug_mode=False, extra_headers=None):
+    def __init__(self, debug_mode=False, extra_headers=None, skip_session=False):
         self.debug_mode = debug_mode
         self._log = get_logger(self.SERVICE_NAME)
-        self.client = requests.Session()
-
-        # Varsayılan header'lar
-        headers = {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'accept-language': 'en-US,en;q=0.9',
-            'cache-control': 'max-age=0',
-            'upgrade-insecure-requests': '1',
-        }
-        if extra_headers:
-            headers.update(extra_headers)
-        self.client.headers.update(headers)
-
-        self._log.info(f"{self.SERVICE_NAME} Bypass (curl_cffi) hazır. Debug: {debug_mode}")
+        if not skip_session:  # ← yeni
+            self.client = requests.Session()
+            headers = {
+                'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'accept-language': 'en-US,en;q=0.9',
+                'cache-control': 'max-age=0',
+                'upgrade-insecure-requests': '1',
+            }
+            if extra_headers:
+                headers.update(extra_headers)
+            self.client.headers.update(headers)
+    
+        self._log.info(f"{self.SERVICE_NAME} Bypass hazır. Debug: {debug_mode}")
 
     def is_own_domain(self, url: str) -> bool:
         """URL'nin bu servisin domain'lerinden birine ait olup olmadığını kontrol eder."""

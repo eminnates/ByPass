@@ -1,19 +1,20 @@
 """
 Kuyruk Yöneticisi — Heavy / Fast Dual Lane
 
-Heavy lane: Browser gerektiren işlemler (AyLink token alma, max 3 worker)  
-Fast lane: HTTP-only bypass (OUO, redirect, AyLink API, sınırsız)
+Heavy lane: Browser gerektiren işlemler (OUO tam bypass, AyLink token alma, max 3 worker)  
+Fast lane: HTTP-only bypass (redirect, AyLink API, sınırsız vb.)
 
 Tüm kuyruk durumu ve dispatch mantığı burada merkezileştirilmiştir.
 """
 
+import time
 import threading
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
 
 from .constants import is_heavy
 from .logger import get_logger
-from .services.engine_wrapper import run_fast_bypass, run_heavy_token_fetch
+from .services.engine_wrapper import run_fast_bypass, run_heavy_bypass, shutdown_ouo
 
 log = get_logger("queue")
 
@@ -23,6 +24,7 @@ log = get_logger("queue")
 heavy_executor = ThreadPoolExecutor(max_workers=3)    # Browser: RAM yoğun
 fast_executor = ThreadPoolExecutor(max_workers=15)    # HTTP: I/O-bound, 15 yeterli
 vt_executor = ThreadPoolExecutor(max_workers=3)       # VT API: rate limit var
+webhook_executor = ThreadPoolExecutor(max_workers=5)  # Webhook: ağ gecikmesine karşı ayrı havuz
 
 # =========================================================================
 # THREAD-SAFE KUYRUK TAKİBİ
@@ -31,6 +33,7 @@ _queue_lock = threading.Lock()
 _heavy_queue: list[int] = []       # Browser kuyruğunda bekleyenler
 _heavy_active: set[int] = set()    # Browser aktif işlemler
 _fast_active: set[int] = set()     # HTTP aktif işlemler
+_heavy_enqueued_at: dict[int, float] = {}  # Heavy kuyruk bekleme süresi ölçümü
 
 
 def _dispatch_to_fast(link_id: int, url: str, tokens: dict = None):
@@ -53,15 +56,22 @@ def _dispatch_to_fast(link_id: int, url: str, tokens: dict = None):
 
 def _tracked_heavy_process(link_id: int, url: str):
     """Heavy lane: Browser ile token al, sonra fast lane'e API bypass gönder."""
+    wait_time = 0.0
     with _queue_lock:
         if link_id in _heavy_queue:
             _heavy_queue.remove(link_id)
+        enqueued_at = _heavy_enqueued_at.pop(link_id, None)
         _heavy_active.add(link_id)
+    if enqueued_at is not None:
+        wait_time = max(0.0, time.monotonic() - enqueued_at)
 
-    log.info(f"[HEAVY] İşlem başladı: ID={link_id} | Aktif: {len(_heavy_active)} | Kuyrukta: {len(_heavy_queue)}")
+    log.info(
+        f"[HEAVY] İşlem başladı: ID={link_id} | Bekleme: {wait_time:.2f}s | "
+        f"Aktif: {len(_heavy_active)} | Kuyrukta: {len(_heavy_queue)}"
+    )
 
     try:
-        run_heavy_token_fetch(
+        run_heavy_bypass(
             link_id, url,
             fast_callback=lambda lid, u, tokens: fast_executor.submit(_dispatch_to_fast, lid, u, tokens)
         )
@@ -94,6 +104,7 @@ def submit_to_queue(link_id: int, url: str):
     if is_heavy(url):
         with _queue_lock:
             _heavy_queue.append(link_id)
+            _heavy_enqueued_at[link_id] = time.monotonic()
         log.info(f"[HEAVY] Kuyruğa eklendi: ID={link_id} | Sıra: {len(_heavy_queue)}")
         heavy_executor.submit(_tracked_heavy_process, link_id, url)
     else:
@@ -119,7 +130,7 @@ def get_queue_info() -> dict:
         return {
             "fast": {
                 "active_count": len(_fast_active),
-                "max_workers": 50,
+                "max_workers": 15,
                 "active_ids": list(_fast_active),
             },
             "heavy": {
@@ -144,4 +155,6 @@ def shutdown():
     heavy_executor.shutdown(wait=True, cancel_futures=True)
     fast_executor.shutdown(wait=True, cancel_futures=True)
     vt_executor.shutdown(wait=True, cancel_futures=True)
+    webhook_executor.shutdown(wait=True, cancel_futures=True)
+    shutdown_ouo()
     log.info("Tüm executor'lar kapatıldı.")

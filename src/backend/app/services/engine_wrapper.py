@@ -1,11 +1,10 @@
 """
 Bypass Engine Wrapper — Heavy/Fast 2 Aşamalı Mimari
 
-Heavy: AyLink token alma (browser gerekli, 3 worker limit)
-Fast:  AyLink API, OUO, Redirect (HTTP only, sınırsız)
+Heavy: AyLink token alma + OUO tam bypass (browser gerekli)
+Fast:  AyLink API, Redirect ve diğer HTTP tabanlı bypass'lar
 """
 import httpx
-import threading
 from datetime import datetime, timezone
 from app.models import BypassLink
 from app.logger import get_logger
@@ -25,8 +24,16 @@ log = get_logger("engine")
 def _run_redirect(url: str):
     return redirect_resolve(url)
 
+_ouo_instance = None
+
+def _get_ouo_bypass():
+    global _ouo_instance
+    if _ouo_instance is None:
+        _ouo_instance = OuoAutoBypass(debug_mode=False)
+    return _ouo_instance
+
 def _run_ouo(url: str):
-    return OuoAutoBypass().hedef_linki_bul(url)
+    return _get_ouo_bypass().hedef_linki_bul(url, close_browser_after=False)
 
 def _run_trlink(url: str):
     return TRLinkBypass().hedef_linki_bul(url)
@@ -41,7 +48,6 @@ def _run_cutyio(url: str):
 # Registry: BypassType → handler fonksiyonu
 _BYPASS_HANDLERS: dict[BypassType, callable] = {
     BypassType.REDIRECT: _run_redirect,
-    BypassType.OUO: _run_ouo,
     BypassType.TRLINK: _run_trlink,
     BypassType.SHORTEST: _run_shortest,
     BypassType.CUTYIO: _run_cutyio,
@@ -72,6 +78,15 @@ def _vt_scan_background(link_id: int, url: str):
                     record.safety_status = SafetyStatus.ERROR
         except Exception:
             pass
+
+
+def _send_webhook_background(webhook_url: str, payload: dict, link_id: int):
+    """Webhook gönderimini worker kritik yolundan ayırır."""
+    try:
+        httpx.post(webhook_url, json=payload, timeout=5)
+        log.info(f"Webhook gönderildi: ID={link_id} -> {webhook_url}")
+    except Exception as err:
+        log.warning(f"Webhook başarısız: ID={link_id} | {err}")
 
 
 def _save_result(link_id: int, cozum, url: str):
@@ -123,11 +138,8 @@ def _save_result(link_id: int, cozum, url: str):
             vt_executor.submit(_vt_scan_background, link_id, cozum)
 
         if webhook_payload and webhook_url:
-            try:
-                httpx.post(webhook_url, json=webhook_payload, timeout=5)
-                log.info(f"Webhook gönderildi -> {webhook_url}")
-            except Exception as w_err:
-                log.warning(f"Webhook başarısız: {w_err}")
+            from app.queue_manager import webhook_executor
+            webhook_executor.submit(_send_webhook_background, webhook_url, webhook_payload, link_id)
 
     except Exception as e:
         log.error(f"Sonuç kaydetme hatası: {e}", exc_info=True)
@@ -171,15 +183,23 @@ def run_fast_bypass(link_id: int, url: str, aylink_tokens: dict = None):
 # =========================================================================
 # HEAVY İŞLEMLER — Browser gerektirir
 # =========================================================================
-def run_heavy_token_fetch(link_id: int, url: str, fast_callback):
+def run_heavy_bypass(link_id: int, url: str, fast_callback):
     """
-    Heavy lane: AyLink token alma (browser açılır).
-    Token'lar alındıktan sonra fast_callback ile API bypass tetiklenir.
-    
-    Args:
-        fast_callback: Fonksiyon(link_id, url, tokens) — fast lane'e gönderir
+    Heavy lane: Browser işlemlerini yürütür.
+    AyLink: Token alır ve fast_callback ile HTTP API'sine gönderir.
+    OUO: Tüm işlemi browser içinde tamamlar.
     """
     try:
+        bypass_type = get_bypass_type(url)
+        
+        # OUO doğrudan heavy lane üzerinde tamamen çözülür, token devri (fast lane) yapmaz.
+        if bypass_type == BypassType.OUO:
+            log.info(f"[HEAVY] OUO tam tarayıcı bypass başlıyor: ID={link_id}")
+            cozum = _get_ouo_bypass().hedef_linki_bul(url)
+            _save_result(link_id, cozum, url)
+            return
+
+        # AYLINK Token Alma Süreci
         bot = AyLinkBypassUltimate(debug_mode=False)
         tokens = bot.token_al(url)
 
@@ -196,5 +216,11 @@ def run_heavy_token_fetch(link_id: int, url: str, fast_callback):
         fast_callback(link_id, url, tokens)
 
     except Exception as e:
-        log.error(f"[HEAVY] Token alma hatası: ID={link_id} | {e}", exc_info=True)
+        log.error(f"[HEAVY] İşlem hatası: ID={link_id} | {e}", exc_info=True)
         _save_result(link_id, None, url)
+def shutdown_ouo():
+    """Uygulama kapanırken çağır."""
+    global _ouo_instance
+    if _ouo_instance is not None:
+        _ouo_instance._stop_browser()
+        _ouo_instance = None

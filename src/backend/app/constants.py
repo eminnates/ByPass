@@ -133,7 +133,7 @@ DOMAIN_REGISTRY: dict[str, BypassType] = {
 # TÜRETİLMİŞ SET'LER — Registry'den otomatik hesaplanır
 # =========================================================================
 ALLOWED_DOMAINS: set[str] = set(DOMAIN_REGISTRY.keys())
-HEAVY_DOMAINS: set[str] = {d for d, t in DOMAIN_REGISTRY.items() if t == BypassType.AYLINK}
+HEAVY_DOMAINS: set[str] = {d for d, t in DOMAIN_REGISTRY.items() if t in (BypassType.AYLINK, BypassType.OUO)}
 
 
 def _domains_by_type(bypass_type: BypassType) -> set[str]:

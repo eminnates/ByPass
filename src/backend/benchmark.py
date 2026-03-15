@@ -8,6 +8,7 @@ Kullanım:
     python3 benchmark.py --api-only        # Sadece API testleri (backend çalışıyor olmalı)
     python3 benchmark.py --engine-only     # Sadece engine testleri (doğrudan)
     python3 benchmark.py --redirect-only   # Sadece redirect testleri
+    python3 benchmark.py --ouo-memory-matrix [--runs 3]
     python3 benchmark.py --url URL         # Belirli bir URL test et
 
 Sonuçlar: benchmark_results/ klasörüne JSON olarak kaydedilir.
@@ -53,32 +54,41 @@ class MemMonitor:
     def __init__(self):
         self.process = psutil.Process()
         self.running = True
-        self.peak_mb = 0.0
+        self.base_mb = 0.0
+        self.peak_delta_mb = 0.0
         self.thread = threading.Thread(target=self._monitor, daemon=True)
+
+    def _current_total_mb(self):
+        mem = self.process.memory_info().rss
+        for child in self.process.children(recursive=True):
+            try:
+                mem += child.memory_info().rss
+            except Exception:
+                pass
+        return mem / (1024 * 1024)
 
     def _monitor(self):
         while self.running:
             try:
-                mem = self.process.memory_info().rss
-                for child in self.process.children(recursive=True):
-                    try:
-                        mem += child.memory_info().rss
-                    except Exception:
-                        pass
-                mb = mem / (1024 * 1024)
-                if mb > self.peak_mb:
-                    self.peak_mb = mb
+                mb = self._current_total_mb()
+                delta = max(0.0, mb - self.base_mb)
+                if delta > self.peak_delta_mb:
+                    self.peak_delta_mb = delta
             except Exception:
                 pass
             time.sleep(0.05)
             
     def start(self):
+        try:
+            self.base_mb = self._current_total_mb()
+        except Exception:
+            self.base_mb = 0.0
         self.thread.start()
         
     def stop(self):
         self.running = False
         self.thread.join(timeout=0.5)
-        return self.peak_mb
+        return self.peak_delta_mb
 
 class Timer:
     def __init__(self, label, track_mem=True):
@@ -105,6 +115,101 @@ class Timer:
         self.cpu_time = round(time.process_time() - self.start_process, 3)
         if self.track_mem and self.mem_monitor:
             self.peak_mem = round(self.mem_monitor.stop(), 1)
+
+
+def _calc_stats(values):
+    if not values:
+        return {"min": 0, "avg": 0, "max": 0}
+    return {
+        "min": round(min(values), 2),
+        "avg": round(statistics.mean(values), 2),
+        "max": round(max(values), 2),
+    }
+
+
+def run_ouo_memory_matrix(url: str, runs: int = 3):
+    """OUO için cold/warm memory+latency matrisi üretir."""
+    sys.path.insert(0, os.path.dirname(__file__))
+    from app.services.ouo_bypass import OuoAutoBypass
+
+    runs = max(1, int(runs))
+    matrix = {
+        "test": "ouo_memory_matrix",
+        "url": url,
+        "runs": runs,
+        "profiles": {},
+        "improvement": {},
+    }
+
+    print(f"\n{renkli('--- OUO Memory Matrix ---', C.BOLD)}")
+    print(f"  URL: {url}")
+    print(f"  Tekrar: {runs}")
+
+    # Profil 1: Cold start (her istekte browser aç/kapat)
+    cold_times, cold_mems, cold_ok = [], [], []
+    for i in range(1, runs + 1):
+        with Timer("ouo_cold") as t:
+            bot = OuoAutoBypass(debug_mode=False)
+            result = bot.hedef_linki_bul(url, close_browser_after=True)
+        cold_times.append(t.elapsed)
+        cold_mems.append(t.peak_mem)
+        ok = bool(result and not str(result).startswith("__"))
+        cold_ok.append(ok)
+        status_txt = "ok" if ok else "fail"
+        print(f"  {renkli('[cold]', C.YELLOW)} run#{i} -> {t.elapsed:.2f}s | {t.peak_mem:.1f}MB | {status_txt}")
+
+    # Profil 2: Warm reuse (aynı browser/context tekrar kullanılır)
+    warm_times, warm_mems, warm_ok = [], [], []
+    bot = OuoAutoBypass(debug_mode=False)
+    try:
+        # Isınma turu: browser/context spin-up maliyeti matrise dahil edilmez
+        bot.hedef_linki_bul(url, close_browser_after=False)
+        for i in range(1, runs + 1):
+            with Timer("ouo_warm") as t:
+                result = bot.hedef_linki_bul(url, close_browser_after=False)
+            warm_times.append(t.elapsed)
+            warm_mems.append(t.peak_mem)
+            ok = bool(result and not str(result).startswith("__"))
+            warm_ok.append(ok)
+            status_txt = "ok" if ok else "fail"
+            print(f"  {renkli('[warm]', C.CYAN)} run#{i} -> {t.elapsed:.2f}s | {t.peak_mem:.1f}MB | {status_txt}")
+    finally:
+        bot._stop_browser()
+
+    matrix["profiles"]["cold_start"] = {
+        "latency_seconds": _calc_stats(cold_times),
+        "memory_mb": _calc_stats(cold_mems),
+        "samples": [{"time": t, "mem": m, "ok": ok} for t, m, ok in zip(cold_times, cold_mems, cold_ok)],
+    }
+    matrix["profiles"]["warm_reuse"] = {
+        "latency_seconds": _calc_stats(warm_times),
+        "memory_mb": _calc_stats(warm_mems),
+        "samples": [{"time": t, "mem": m, "ok": ok} for t, m, ok in zip(warm_times, warm_mems, warm_ok)],
+    }
+
+    cold_success_mems = [m for m, ok in zip(cold_mems, cold_ok) if ok]
+    warm_success_mems = [m for m, ok in zip(warm_mems, warm_ok) if ok]
+    cold_success_times = [t for t, ok in zip(cold_times, cold_ok) if ok]
+    warm_success_times = [t for t, ok in zip(warm_times, warm_ok) if ok]
+
+    cold_avg_mem = round(statistics.mean(cold_success_mems), 2) if cold_success_mems else 0
+    warm_avg_mem = round(statistics.mean(warm_success_mems), 2) if warm_success_mems else 0
+    cold_avg_lat = round(statistics.mean(cold_success_times), 2) if cold_success_times else 0
+    warm_avg_lat = round(statistics.mean(warm_success_times), 2) if warm_success_times else 0
+
+    mem_improvement = round(((cold_avg_mem - warm_avg_mem) / cold_avg_mem) * 100, 2) if cold_avg_mem else 0
+    lat_improvement = round(((cold_avg_lat - warm_avg_lat) / cold_avg_lat) * 100, 2) if cold_avg_lat else 0
+    matrix["improvement"] = {
+        "memory_reduction_percent": mem_improvement,
+        "latency_reduction_percent": lat_improvement,
+        "cold_success_count": len(cold_success_mems),
+        "warm_success_count": len(warm_success_mems),
+    }
+
+    print(f"\n  {renkli('Ortalama memory düşüşü:', C.BOLD)} {renkli(f'%{mem_improvement}', C.GREEN if mem_improvement > 0 else C.YELLOW)}")
+    print(f"  {renkli('Ortalama latency düşüşü:', C.BOLD)} {renkli(f'%{lat_improvement}', C.GREEN if lat_improvement > 0 else C.YELLOW)}")
+
+    return matrix
 # ==========================================
 # TEST: Engine Benchmark (Doğrudan motor)
 # ==========================================
@@ -173,10 +278,10 @@ def test_engine(url):
             scrapling.fetchers.stealth_chrome.StealthySession.fetch = original_fetch
 
     elif "ouo" in url:
-        motor = "OUO (curl_cffi)"
-        lane = "FAST"
+        motor = "OUO (Playwright)"
+        lane = "HEAVY"
 
-        with Timer("import") as t:
+        with Timer("import", track_mem=False) as t:
             from app.services.ouo_bypass import OuoAutoBypass
         sonuc["asamalar"]["import"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
@@ -184,9 +289,9 @@ def test_engine(url):
             bot = OuoAutoBypass(debug_mode=False)
         sonuc["asamalar"]["init"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
-        with Timer("bypass [FAST]") as t:
+        with Timer("bypass [HEAVY]") as t:
             result = bot.hedef_linki_bul(url)
-        sonuc["asamalar"]["bypass_fast"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
+        sonuc["asamalar"]["bypass_heavy"] = {"time": t.elapsed, "cpu": t.cpu_time, "mem": t.peak_mem}
 
     elif "tr.link" in url:
         motor = "TRLink (curl_cffi)"
@@ -282,7 +387,7 @@ def test_engine(url):
         mem = metrics["mem"]
         bant = "█" * max(1, int(sure))
         
-        metrics_str = f"cpu: {cpu:5.2f}s | mem: {mem:5.1f}MB"
+        metrics_str = f"cpu: {cpu:5.2f}s | memΔ: {mem:5.1f}MB"
         print(f"     {adim:25s} {renkli(f'{sure:6.2f}s', C.YELLOW)} [{renkli(metrics_str, C.CYAN)}] {renkli(bant, C.BLUE)}")
 
     # Print sub-phases
@@ -382,6 +487,16 @@ def rapor_yazdir(sonuclar):
 
     basarili = []
     for s in sonuclar:
+        if s.get("test") == "ouo_memory_matrix":
+            mem_drop = s.get("improvement", {}).get("memory_reduction_percent", 0)
+            lat_drop = s.get("improvement", {}).get("latency_reduction_percent", 0)
+            print(
+                f"  {'OUO Memory Matrix':30s} {renkli('[MATRIX]', C.BLUE):>20s}  "
+                f"{renkli(f'mem % {mem_drop:5.2f}', C.GREEN if mem_drop > 0 else C.YELLOW)}  "
+                f"{renkli(f'lat % {lat_drop:5.2f}', C.GREEN if lat_drop > 0 else C.YELLOW)}"
+            )
+            continue
+
         durum = s.get("durum", "?")
         if "basarili" in durum or durum == "cache_hit":
             renk = C.GREEN
@@ -409,6 +524,8 @@ if __name__ == "__main__":
     parser.add_argument("--api-only", action="store_true", help="Sadece API testleri")
     parser.add_argument("--engine-only", action="store_true", help="Sadece engine testleri")
     parser.add_argument("--redirect-only", action="store_true", help="Sadece redirect testleri")
+    parser.add_argument("--ouo-memory-matrix", action="store_true", help="OUO cold/warm memory matrisi")
+    parser.add_argument("--runs", type=int, default=3, help="Matrix test tekrarı")
     parser.add_argument("--url", type=str, help="Belirli bir URL test et")
     args = parser.parse_args()
 
@@ -418,7 +535,7 @@ if __name__ == "__main__":
         "aylink":      ("https://ay.live/efsane",          "AyLink"),
         "aylink_404":  ("https://ay.link/bulinkmevcut",    "AyLink 404"),
         # Fast (HTTP)
-        "ouo":         ("https://ouo.io/94jkLO",           "OUO"),
+        "ouo":         ("https://ouo.io/5razeq",           "OUO"),
         "ouo_404":     ("https://ouo.io/asdfasdf123",      "OUO 404"),
         # Redirect (HTTP)
         "tinyurl":     ("https://tinyurl.com/3mzv5xsn",    "TinyURL"),
@@ -438,10 +555,15 @@ if __name__ == "__main__":
 
     if args.url:
         print(f"\n{renkli(f'--- Tek URL Testi ---', C.BOLD)}")
-        if args.api_only:
+        if args.ouo_memory_matrix:
+            sonuclar.append(run_ouo_memory_matrix(args.url, args.runs))
+        elif args.api_only:
             sonuclar.append(test_api(args.url))
         else:
             sonuclar.append(test_engine(args.url))
+    elif args.ouo_memory_matrix:
+        ouo_url, _ = TESTS["ouo"]
+        sonuclar.append(run_ouo_memory_matrix(ouo_url, args.runs))
     elif args.redirect_only:
         for key in ["tinyurl", "cutt"]:
             url, label = TESTS[key]
